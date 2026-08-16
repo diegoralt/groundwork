@@ -1,6 +1,6 @@
 # Groundwork — Integración Claude Code
 
-Copia este archivo a la raíz de tu repo (junto a `profile/`, `applications/`, etc.) y copia `.claude/` (dentro de esta misma carpeta `claude-code/`) también a la raíz. Claude Code carga `CLAUDE.md` automáticamente al abrir el proyecto.
+No hay nada que instalar: este archivo y `.claude/` ya están en la raíz, así que los comandos y el agente funcionan al abrir el fork. Si no usas Claude Code, ignóralos — todo el sistema se opera igual pegando los archivos de `prompts/` en el chat que prefieras.
 
 ## Instrucciones base
 

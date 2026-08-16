@@ -5,11 +5,11 @@ argument-hint: [slug-empresa-rol]
 
 Slug: $ARGUMENTS
 
-1. Resuelve rutas por convención de slug:
+1. Resuelve rutas por convención de slug (`docs/workflow.md` → Fase 2):
    - CV: `cvs/cv_for_$ARGUMENTS.md`
    - Tracking: `applications/$ARGUMENTS-application.md`
-   - PDF: `cvs-pdf/[nombre-de-config.yaml]-$ARGUMENTS.pdf`
-   Si alguno no existe, dilo y detente.
+   - PDF: `cvs-pdf/[nombre]-$ARGUMENTS.pdf`, donde `[nombre]` es `contact.name` de `config.yaml` en kebab-case (minúsculas, sin acentos, espacios como guiones) — no el valor crudo
+   Si alguno no existe, dilo y detente. Antes de culpar a un paso faltante, revisa si existe un archivo con slug parecido: el error más común es que los tres no coincidan.
 
 2. Lanza el subagente `cv-reviewer` con las tres rutas. Si ya leíste el CV en este paso, pásale el contenido inline en el prompt en vez de pedirle que lo vuelva a leer.
 
@@ -18,7 +18,7 @@ Slug: $ARGUMENTS
    - Para la Parte B, decide junto con el usuario qué incorporar — no la apliques mecánicamente.
    - Nunca incorpores una sugerencia que invente datos no verificados en `profile/`.
 
-4. El ATS-check aplica solo al CV. Extrae las keywords requeridas/preferidas de la sección "Mapeo Perfil vs Requisitos" del tracking file y corre:
+4. El ATS-check aplica solo al CV. Extrae las keywords requeridas/preferidas de la sección "Mapeo: Perfil vs Requisitos" del tracking file y corre:
    `python3 scripts/ats_check.py "cvs-pdf/[nombre]-$ARGUMENTS.pdf" "kw1,kw2,kw3,..."`
    Si el CV se editó en el paso 3, regenera el PDF antes de correr el check:
    `python3 scripts/generate_cv_pdf.py "cvs/cv_for_$ARGUMENTS.md" "cvs-pdf/[nombre]-$ARGUMENTS.pdf"`

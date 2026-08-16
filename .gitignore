@@ -7,6 +7,10 @@
 /cvs-pdf/
 /config.yaml
 
+# Notas de desarrollo de este proyecto — no son del usuario que hace fork.
+# Local a propósito: la continuidad de groundwork no le sirve a quien lo usa.
+/.claude/ESTADO.md
+
 # OS
 .DS_Store
 Thumbs.db

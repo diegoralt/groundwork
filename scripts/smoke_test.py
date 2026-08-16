@@ -42,6 +42,15 @@ def main() -> int:
     assert not any(f.startswith(("profile/", "applications/", "cvs/")) for f in files), \
         f"datos personales versionados: {[f for f in files if f.startswith(('profile/', 'cvs/'))]}"
 
+    # la integración de Claude Code funciona sin instalar nada: ya está en la raíz
+    for f in ("CLAUDE.md", ".claude/agents/cv-reviewer.md", ".claude/commands/bootstrap.md",
+              ".claude/commands/mock-interview.md", ".claude/commands/review-application.md"):
+        assert f in files, f"{f} no llega al fork — la ruta Claude Code no funcionaría sola"
+    assert not any(f.startswith("claude-code/") for f in files), \
+        "quedó la carpeta de staging: la integración ya no se copia a mano"
+    # ESTADO.md son notas de desarrollo de groundwork, no del usuario que hace fork
+    assert ".claude/ESTADO.md" not in files, "ESTADO.md está versionado y viaja en cada fork"
+
     with tempfile.TemporaryDirectory() as tmp:
         fork = Path(tmp) / "fork"
         for f in files:

@@ -10,12 +10,22 @@ Nace de un sistema privado usado en una búsqueda de empleo real durante varios 
 
 La mayoría de herramientas de CV optimizan para que "suene bien" contra un ATS. Ninguna evita que inventes un logro. Este sistema hace lo contrario: cada afirmación en un CV se verifica contra tu propio historial documentado antes de escribirse, un segundo par de ojos (humano o IA) la revisa antes de enviarse, y las tecnologías que confirmaste no dominar quedan registradas para nunca volver a reclamarse por accidente.
 
-## Dos capas
+## Dos rutas, el mismo sistema
 
-- **`prompts/`** — prompts en markdown, agnósticos de herramienta. Cópialos y pégalos en el chat de IA que uses (ChatGPT, Claude, Gemini, lo que sea).
-- **`claude-code/`** — la misma lógica, empaquetada como agente/comandos de [Claude Code](https://claude.com/product/claude-code), si es lo que usas. Automatiza lo que en la capa de prompts es un checklist manual.
+**Groundwork no requiere Claude Code.** Todo se puede operar copiando y pegando los archivos de `prompts/` en el chat de IA que uses — ChatGPT, Claude, Gemini, el asistente de tu editor. Si además usas [Claude Code](https://claude.com/product/claude-code), los mismos pasos ya vienen empaquetados como comandos: no hay nada que instalar, `CLAUDE.md` y `.claude/` están en la raíz y funcionan al abrir tu fork.
 
-Los scripts en `scripts/` (Python puro) los usan ambas capas por igual — no dependen de ningún LLM.
+| Fase | Ruta manual (cualquier IA) | Ruta Claude Code |
+|---|---|---|
+| Contexto persistente | Pega `prompts/system-prompt.md` como instrucción de sistema | Automático (`CLAUDE.md` lo carga) |
+| Construir tu perfil | Pega `prompts/bootstrap-questionnaire.md` | `/bootstrap` |
+| Revisar antes de enviar | Sigue `prompts/review-application-checklist.md` y pega `prompts/cv-reviewer-prompt.md` en una sesión aparte | `/review-application [slug]` |
+| Practicar la entrevista | Pega `prompts/mock-interview-prompt.md` | `/mock-interview [slug]` |
+
+La diferencia es solo cuánto tecleas: la ruta Claude Code resuelve rutas, lanza el revisor como subagente y encadena los checks; la manual te pide hacer esos pasos tú. Ninguna de las dos toma decisiones que la otra no tome.
+
+Los scripts de `scripts/` (Python puro) sirven a ambas por igual — no dependen de ningún LLM.
+
+> El segundo par de ojos funciona mejor en una **sesión distinta** de la que escribió el CV. En la ruta manual eso significa un chat nuevo; en Claude Code lo hace solo, lanzando el agente `cv-reviewer` con su propio contexto.
 
 ## Quickstart
 

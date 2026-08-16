@@ -3,66 +3,56 @@
 > Punto de retomada. Se sobrescribe cada sesión, no se acumula. El historial lo tiene git.
 > Última actualización: 2026-08-15
 
-> **Este archivo se publica.** El repo es público (o va a serlo): nada de nombres de
-> empresas reales, rutas locales ni datos del repo privado del que salió el proyecto.
-> Las lecciones duraderas y lo que sí es sensible viven en memoria, no aquí.
+> **Este archivo ya NO se versiona** (`.gitignore` → `/.claude/ESTADO.md`). Son notas de
+> desarrollo de groundwork; a quien hace fork no le sirven y antes le llegaban dentro de
+> su `.claude/`. Costo aceptado: no hay continuidad de groundwork entre máquinas.
+> Las lecciones duraderas viven en memoria, no aquí.
 
 ## Estado actual
 
-Spin-off open-source de un pipeline privado de CV/aplicaciones. MIT, sin remoto configurado todavía.
+Spin-off open-source de un pipeline privado de CV/aplicaciones. MIT, sin remoto todavía. Un commit limpio en `main`; **todo lo demás sin commitear** (15 cambios entre modificados y renombrados).
 
-Esta sesión hizo una **pasada de verificación funcional** — correr el flujo end-to-end como usuario nuevo, no solo los self-checks — arregló lo que se rompía, y reescribió la historia de git a un único commit limpio (ver "Fugas de datos personales").
+El sistema está verificado en los cuatro frentes que importan: los scripts corren, el flujo del README corre en un fork limpio, la capa de prompts se auditó contra un perfil ficticio con violaciones plantadas, y la paridad con el proyecto privado original está contrastada. No hay nada roto conocido.
 
-### Cómo se prueba esto
+### Estructura (post-reestructura del 2026-08-15)
 
-Dos niveles, ambos sin framework ni dependencias de test:
+La integración de Claude Code vive **en la raíz** — `CLAUDE.md`, `.claude/agents/`, `.claude/commands/`. Cero pasos de instalación. Antes había una carpeta `claude-code/` de staging que había que copiar a mano; ese paso pisaba el `.claude/` existente y le entregaba al forker el ESTADO.md de groundwork. La carpeta ya no existe.
 
-- **Unitario**: `python3 scripts/<script>.py --demo` en cada uno de los 5 scripts. Asserts sobre parsers y cálculo.
-- **Integración**: `python3 scripts/smoke_test.py`. Copia solo los archivos versionados a un tmpdir (lo que recibe quien haga fork), corre el Quickstart del README literal, genera CV → PDF y pasa los cuatro checks. Verifica que las 5 secciones del template lleguen al PDF y que las notas internas no.
+Las dos rutas de uso (prompts manuales / Claude Code) están comparadas fase por fase en una tabla del README. **Groundwork no requiere Claude Code** y el README lo dice en la primera línea de esa sección.
 
-El smoke test existe porque los tres bugs de esta sesión eran de integración: los `--demo` pasaban todos mientras el generador truncaba CVs. Se verificó que falla al reintroducir el bug del `---`.
+### Cómo se prueba
 
-### Bugs encontrados y corregidos (cada uno con su regresión en el `--demo` del script)
+- **Unitario**: `python3 scripts/<script>.py --demo` en los 5 scripts. Parsers y cálculo.
+- **Integración**: `python3 scripts/smoke_test.py`. Copia lo que devuelve `git ls-files` a un tmpdir (lo que recibe quien hace fork), corre el Quickstart literal, genera CV → PDF, pasa los cuatro checks. Además verifica que la integración de Claude Code llegue completa, que no reaparezca `claude-code/` y que `ESTADO.md` no viaje.
 
-1. **`generate_cv_pdf.py` truncaba el CV en silencio.** `strip_frontmatter_and_notes()` corta en el *primer* `---`, que es el separador de notas internas — pero un `---` usado como regla horizontal (lo que emite cualquier LLM al que le pidas un CV en markdown) se llevaba el resto del documento con exit 0 y cero advertencias. Medido contra un CV legacy real: 106 líneas → 35, 4 empleos → 1. Ahora avisa a stderr cuando lo descartado trae encabezados (las notas internas nunca los llevan — solo etiquetas `**Nota**:` —, así que el `#` distingue el error del uso legítimo).
-2. **`followup_check.py` crasheaba con `KeyError: 'company'`** ante un tracking a medio llenar, a media impresión del reporte. Mismo patrón latente en `conversion_report.py`. Resuelto con un helper `label()` y `.get()`.
-3. **`ats_check.check_garbled()` no veía el glifo roto que produce el propio generador.** Un carácter fuera de WinAnsi no sale como `�` ni `(cid:N)`: reportlab lo sustituye por `\x7f` o por `■` según el caso. El check daba luz verde a un PDF con cajas negras visibles.
+El smoke test existe porque todos los bugs graves encontrados han sido de integración: los `--demo` pasaban en verde mientras el generador truncaba CVs. Se verificó que falla de verdad al reintroducir el bug del `---`.
 
-### Fugas de datos personales corregidas
+### Invariantes que no se deben romper
 
-Tres strings del repo privado sobrevivieron a la auditoría del commit inicial:
-
-- `scripts/ats_check.py` — un teléfono real verbatim en un comentario.
-- `scripts/followup_check.py` — el nombre de una empresa real y el detalle de cómo se le aplicó, en un docstring.
-- `.claude/ESTADO.md` — la ruta local del repo privado y dos nombres de archivo `cv_for_*.md` con empresas reales.
-
-Los tres corregidos, y la historia de git **reescrita a un único commit limpio** (`git checkout --orphan`) porque los dos commits anteriores los contenían. No había remoto, así que no quedó copia en ningún lado.
-
-Lección de método: la auditoría del commit inicial revisó contenido de documentos, no **comentarios y docstrings de código** — que es justo donde se cuela el detalle real usado como ejemplo al portar un script. Un `grep` de nombre/email/teléfono/empresas debe correr sobre el repo entero, sin excluir `.py`, y el `-w` importa: sin límites de palabra, los nombres cortos de empresa ahogan la señal en falsos positivos (p. ej. una empresa llamada "Stori" hace match con cada "historia" del texto).
-
-### Faltante estructural cerrado
-
-**`templates/cv-template.md`** — el artefacto central del pipeline (`cvs/cv_for_[slug].md`) era el único sin plantilla, y `system-prompt.md` afirmaba falsamente que `templates/` los tenía todos. El formato es un contrato implícito del parser, ahora documentado en `docs/workflow.md` (Fase 2) y referenciado desde README y `system-prompt.md`.
+1. **El CV markdown tiene exactamente 3 líneas `---`** (frontmatter + apertura de notas). Usarlo como regla horizontal trunca el PDF; el generador avisa a stderr pero el template es la defensa real.
+2. **El slug es compartido** por CV, PDF y tracking; `[tu-nombre]` del PDF va en kebab-case, no el valor crudo de `contact.name`. Documentado en `docs/workflow.md` → Fase 2.
+3. **"Gaps confirmados" de `skills.md` es una lista de exclusión**, y las notas `⚠️ Cuidado` limitan cómo reusar un logro. Ambas convenciones las tienen que conocer los dos `cv-reviewer` (prompt y agente) y el paso de generación de CV — se auditó una vez que no las conocían y 3 de 6 violaciones plantadas pasaban limpias.
+4. **Ninguna PII en el repo**, incluidos comentarios y docstrings. `LICENSE` lleva el nombre real a propósito (atribución MIT).
 
 ### Decisión de alcance (no revisitar sin nueva evidencia)
 
-Funcionalidad 2 (buscador/recomendador automático de vacantes) se evaluó y se descartó para este release — riesgo de ToS/cuenta (LinkedIn prohíbe scraping automatizado), y ninguna evidencia del pipeline original mostró que "encontrar vacantes" fuera el cuello de botella. Si se retoma: solo sobre APIs públicas (Adzuna, Arbeitnow, Greenhouse/Lever), sin vínculo a cuenta personal. Detalle en `README.md` → "Qué no incluye (todavía)".
+Buscador/recomendador automático de vacantes: descartado para este release — riesgo de ToS/cuenta (LinkedIn prohíbe scraping automatizado) y ninguna evidencia de que "encontrar vacantes" fuera el cuello de botella. Si se retoma, solo sobre APIs públicas (Adzuna, Arbeitnow, Greenhouse/Lever). Detalle en `README.md` → "Qué no incluye (todavía)".
 
 ## Siguiente acción
 
-1. **Revisar el contenido completo** — pendiente explícito, todavía no se hizo una pasada de lectura completa por el usuario.
-2. Una vez revisado y aprobado: crear el repo en GitHub, conectar `origin`, primer push.
+1. **Commitear todo lo pendiente.**
+2. **Revisar el contenido completo** — pendiente explícito, todavía no se hizo una pasada de lectura completa por el usuario.
+3. Una vez revisado y aprobado: crear el repo en GitHub, conectar `origin`, primer push.
 
 ## Decisiones abiertas
 
-- **¿`.claude/ESTADO.md` debe versionarse en un repo público?** Hoy sí se versiona y por lo tanto viaja en cada fork: un tercero recibe las notas internas de desarrollo del proyecto. Se sanitizó para que no lleve datos personales, pero la pregunta de fondo sigue: la convención de continuidad asume repos privados. Alternativa si molesta: `.gitignore` sobre `.claude/` y llevar la continuidad fuera del repo.
-- `check_em_dash_style.py` mantiene su copia deliberada de `strip_frontmatter_and_notes()` **sin** la advertencia de truncado (solo la tiene el generador, que corre primero en el flujo). Si alguien corre el style check aislado sobre un CV con `---` de más, no se entera. Decisión consciente para no duplicar la lógica.
-- Cosmético sin resolver: el estilo `META` (itálica) de `generate_cv_pdf.py` casi nunca dispara, porque las líneas de fecha reales son `**Ene 2022 - Nov 2025** | Ciudad` y no terminan en `**`. Caen a `BODY`. Los PDFs del proyecto original salieron así; no se tocó.
-- El smoke test no valida el **contenido** de los prompts, solo que el flujo de scripts corra. La capa de prompts (`prompts/`, `claude-code/`) no tiene verificación automatizada y probablemente no debería tenerla — se valida usándola.
+- **Falta la vista de "todas mis aplicaciones y su estado".** El proyecto original tenía `applications-index.md` mantenido a mano; aquí `followup_check.py` solo muestra lo accionable y `conversion_report.py` solo tasas por tier. Con 15 aplicaciones no hay panorama. Si se agrega, derivada del frontmatter y no mantenida a mano. Es alcance de producto, no un bug.
+- **La prueba adversarial la ejecutó quien plantó las trampas**, así que prueba que el prompt *contiene* la instrucción que atrapa cada violación, no que un modelo sin contexto la aplicaría. Una prueba limpia necesita un evaluador que no haya visto el fixture.
+- **Las referencias cruzadas de la capa de prompts** (rutas y nombres de sección citados entre archivos) se verifican a mano; encontraron 2 defectos reales el 2026-08-15. Vale moverlo al smoke test si vuelve a pasar.
+- `check_em_dash_style.py` mantiene su copia deliberada de `strip_frontmatter_and_notes()` **sin** la advertencia de truncado — solo la tiene el generador, que corre primero. Decisión consciente para no duplicar lógica.
+- Cosmético: el estilo `META` (itálica) de `generate_cv_pdf.py` casi nunca dispara, porque las líneas de fecha reales (`**Ene 2022 - Nov 2025** | Ciudad`) no terminan en `**` y caen a `BODY`. Los PDFs del proyecto original salieron así; no se tocó.
 
 ## Notas de operación
 
-- **No copiar contenido del repo privado sin auditar comentarios y docstrings, no solo el texto de los documentos** — ver "Fugas de datos personales" arriba.
-- La regla central del sistema (nunca reclamar un dato no verificado) vive en `prompts/system-prompt.md`.
+- **No copiar contenido del repo privado sin auditar comentarios y docstrings**, no solo el texto de los documentos: ahí se coló PII que sobrevivió a la primera auditoría.
 - Python mínimo: 3.9 (PEP 585 en las anotaciones). Documentado en README.
-- `LICENSE` lleva el nombre real del autor a propósito: es la atribución de copyright MIT, no una fuga.
