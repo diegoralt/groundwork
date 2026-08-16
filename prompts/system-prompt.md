@@ -1,6 +1,6 @@
 # Groundwork — Prompt de Sistema
 
-Pega este archivo como instrucción de sistema / contexto persistente en el chat de IA que uses (ChatGPT, Claude, Gemini, o el asistente de tu editor). Si usas Claude Code, no lo pegues a mano — usa `claude-code/CLAUDE.md`, que ya lo carga automáticamente.
+Pega este archivo como instrucción de sistema / contexto persistente en el chat de IA que uses (ChatGPT, Claude, Gemini, o el asistente de tu editor). Si usas Claude Code no lo pegues a mano: el `CLAUDE.md` de la raíz ya lo carga solo.
 
 ## Qué es esto
 
@@ -34,10 +34,10 @@ config.yaml                  # tus datos de contacto + tus categorías de rol �
 ## Flujo por aplicación nueva
 
 1. **Antes de invertir tiempo**, evalúa la vacante contra tus propias categorías (ver `config.yaml` → `tiers`) y contra la sección de gaps confirmados en `skills.md`. Si un requisito "must have" ya está documentado como gap tuyo, es descarte o se documenta como tal — nunca se reclama.
-2. **Genera el CV** desde `templates/cv-template.md`, verificado línea por línea contra `profile/`. Copiar una keyword del posting sin verificar que aplica es el error más común y más caro de este flujo. Respeta el formato del template: hay un único `---` después del frontmatter y marca el inicio de las notas internas — usarlo como separador de secciones borra todo lo que quede debajo al generar el PDF.
+2. **Genera el CV** desde `templates/cv-template.md`, verificado línea por línea contra `profile/`. Copiar una keyword del posting sin verificar que aplica es el error más común y más caro de este flujo. Al verificar, dos secciones mandan sobre el resto: **"Gaps confirmados" en `skills.md` es una lista de exclusión** (aparecer ahí es la prohibición, no la verificación), y **las notas `⚠️ Cuidado` de `experience.md` limitan cómo se puede reusar cada logro** — borrar ese matiz para que suene mejor es inflar. Respeta el formato del template: hay un único `---` después del frontmatter y marca el inicio de las notas internas — usarlo como separador de secciones borra todo lo que quede debajo al generar el PDF.
 3. **Genera el tracking** desde `templates/application-tracking-template.md`. Las STAR stories se adaptan desde `profile/star-stories.md`, no se redactan de cero cada vez.
 4. **Revisa antes de enviar** — usa `prompts/cv-reviewer-prompt.md` (segundo par de ojos, nunca la misma sesión que escribió el CV) + `scripts/ats_check.py` (cobertura de keywords en el PDF) + `scripts/check_em_dash_style.py` (detecta prosa que delata redacción de IA).
-5. **Actualiza el índice** de tu propio pipeline (una tabla simple con empresa/rol/estado/fecha sirve — no hace falta más).
+5. **Deja el estado en el frontmatter**, no en un índice aparte: `status`, `follow_up`, `tier`, `advanced` y las fechas de cada `applications/[slug]-application.md` son la fuente. `followup_check.py` y `conversion_report.py` derivan de ahí lo que necesitas ver — un índice mantenido a mano se desincroniza en cuanto cambia un estado.
 
 ## Seguimiento
 

@@ -1,8 +1,8 @@
 # Checklist: Revisión antes de enviar
 
-Corre esto antes de dar por lista cualquier aplicación. Si usas Claude Code, `claude-code/.claude/commands/review-application.md` automatiza los pasos — esta versión es la manual, para cualquier otra herramienta.
+Corre esto antes de dar por lista cualquier aplicación. Si usas Claude Code, `/review-application [slug]` automatiza los pasos — esta versión es la manual, para cualquier otra herramienta.
 
-1. **Resuelve las rutas**: CV en `cvs/cv_for_[slug].md`, tracking en `applications/[slug]-application.md`, PDF en `cvs-pdf/[tu-nombre]-[slug].pdf`. Si alguno no existe, no sigas — falta un paso anterior.
+1. **Resuelve las rutas** desde el slug compartido (`[empresa]-[rol]` en kebab-case, ver `docs/workflow.md` → Fase 2): CV en `cvs/cv_for_[slug].md`, tracking en `applications/[slug]-application.md`, PDF en `cvs-pdf/[tu-nombre]-[slug].pdf`. Si alguno no existe, no sigas: o falta un paso anterior, o el slug no coincide en los tres.
 
 2. **Corre el revisor de CV** (`prompts/cv-reviewer-prompt.md`) en una sesión nueva, con el CV, `profile/experience.md`, `profile/skills.md` y la vacante adjuntos.
 
@@ -13,7 +13,7 @@ Corre esto antes de dar por lista cualquier aplicación. Si usas Claude Code, `c
    python3 scripts/generate_cv_pdf.py cvs/cv_for_[slug].md cvs-pdf/[tu-nombre]-[slug].pdf
    ```
 
-5. **Corre el ATS check** — extrae las keywords requeridas/preferidas de la sección "Mapeo Perfil vs Requisitos" del tracking file:
+5. **Corre el ATS check** — extrae las keywords requeridas/preferidas de la sección "Mapeo: Perfil vs Requisitos" del tracking file:
    ```
    python3 scripts/ats_check.py cvs-pdf/[tu-nombre]-[slug].pdf "kw1,kw2,kw3,..."
    ```

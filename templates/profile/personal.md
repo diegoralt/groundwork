@@ -23,4 +23,4 @@ tags: [personal, contacto, información_básica]
 ## Disponibilidad
 - **Disponible para**: [Full-time / Consultoría / ambos]
 - **Modalidad**: [Remoto / Híbrido / Presencial — todas las que realmente aceptarías]
-- **Tipos de rol buscado**: [lista corta, no mezcles 4 direcciones sin narrativa — ver `docs/gap-hunting.md` sobre targeting difuso]
+- **Tipos de rol buscado**: [lista corta. Cuatro direcciones distintas sin narrativa que las una vuelven imposible adaptar el CV: cada aplicación termina peleando contra las otras tres]

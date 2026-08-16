@@ -19,6 +19,18 @@ Estos archivos son la única fuente de verdad. Ningún dato en un CV o un tracki
 
 ## Fase 2: Nueva aplicación
 
+**El slug**: cada aplicación tiene un identificador `[empresa-kebab-case]-[rol-kebab-case]` (ej. `aurelia-senior-backend-engineer`) que **los tres artefactos comparten**:
+
+| Artefacto | Ruta |
+|---|---|
+| CV fuente | `cvs/cv_for_[slug].md` |
+| PDF | `cvs-pdf/[tu-nombre]-[slug].pdf` |
+| Tracking | `applications/[slug]-application.md` |
+
+`[tu-nombre]` es tu `contact.name` de `config.yaml` en kebab-case: minúsculas, sin acentos, espacios como guiones (`Ada Lovelace Ruiz` → `ada-lovelace-ruiz`). No es el valor crudo — un nombre con espacios y mayúsculas produce archivos que la siguiente sesión no encuentra.
+
+Con esto localizas todo lo de una aplicación con un solo patrón de búsqueda, y `/review-application [slug]` resuelve las tres rutas sin que le digas dónde está cada cosa. Si el comando dice que un archivo no existe, lo primero que hay que revisar es que el slug coincida en los tres.
+
 1. **Evalúa la vacante primero**: ¿cae en tus propias categorías objetivo (`config.yaml` → `tiers`)? ¿algún "must have" ya está en la sección "Gaps confirmados" de `skills.md`? Si no pasa tu propio filtro, se descarta antes de invertir tiempo.
 2. **Genera el CV específico** desde `templates/cv-template.md`, verificado línea por línea contra `profile/`, en `cvs/cv_for_[slug].md`.
 

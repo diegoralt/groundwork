@@ -24,6 +24,8 @@ tags: [experience, empleo, historial, logros]
 **Tecnologías utilizadas:**
 - [lista honesta — si el nivel es "consumo de servicio ya configurado" y no "diseño de infraestructura", dilo así]
 
+**⚠️ Cuidado**: [opcional, pero es la línea que más trabajo ahorra después. Cualquier matiz que no se puede omitir al reusar este logro en un CV o una respuesta de entrevista — ej. "el servicio ya existía cuando entré: fue mantenimiento y mejora, no diseño desde cero", o "la decisión de arquitectura fue del equipo; lo mío fue la implementación de un módulo". El revisor de CV lee estas notas y trata como dato inflado cualquier versión que las borre.]
+
 ---
 
 ## Experiencias Previas
