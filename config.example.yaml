@@ -1,0 +1,19 @@
+# Copia este archivo a config.yaml y llena tus datos reales.
+# config.yaml nunca se commitea (ver .gitignore) — ni en tu propio fork.
+
+contact:
+  name: "Tu Nombre Apellido"
+  email: "tu@email.com"
+  phone: "+52 5551234567"
+  location: "Ciudad, País"
+  linkedin: "https://www.linkedin.com/in/tu-usuario/"
+  github: "https://github.com/tu-usuario"
+
+# Categorías de rol para conversion_report.py. Defínelas según tu propio
+# mercado objetivo — no copies las de otra persona, las suyas reflejan su
+# carrera, no la tuya. Ejemplo de arranque, bórralo y arma el tuyo:
+tiers:
+  - id: liderazgo
+    label: "Liderazgo (Tech Lead, Engineering Manager, etc.)"
+  - id: ic
+    label: "Individual Contributor"

@@ -1,0 +1,20 @@
+# Tus datos reales van aquí — nunca se commitean, ni en tu propio fork.
+# Solo templates/ (vacío, sin datos) se versiona. Anclado a la raíz (/) para
+# no atrapar por accidente templates/profile/, que sí debe versionarse.
+/profile/
+/applications/
+/cvs/
+/cvs-pdf/
+/config.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Editor
+.vscode/
+.idea/
