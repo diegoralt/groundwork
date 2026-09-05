@@ -67,6 +67,10 @@ Un solo archivo HTML — sin servidor, sin dependencias, se abre con doble clic 
 python3 scripts/pipeline_board.py --open
 ```
 
+![Vista del Tablero con columnas por de quién es el siguiente movimiento](docs/images/pipeline-board.png)
+
+*(Datos de ejemplo — así se ve con `applications/` vacío al inicio o con tus propias aplicaciones reales.)*
+
 | Vista | Qué muestra |
 |---|---|
 | **Tablero** | Tres columnas — no por estado administrativo, sino por de quién es el siguiente movimiento: tuyo, de ellos, o sin nadie a quien escribirle. Arriba, la agenda de fechas comprometidas en los próximos días. |
