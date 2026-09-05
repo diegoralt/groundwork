@@ -61,6 +61,7 @@ Corre `/mock-interview [slug]` (o sin slug para modo genérico) o pega `prompts/
 - Corre `python3 scripts/followup_check.py` al retomar tu búsqueda — lee el campo `follow_up` de cada tracking file y avisa qué tiene contacto pendiente de seguimiento, qué lleva 15+ días "esperando respuesta" sin reclasificar, y qué quedó sin auditar. Distingue `pending_contact` (vencido, hay a quién escribir) de `no_channel` (vencido, solo portal, espera pasiva) — no genera tarea donde no hay acción real posible.
 - Un rechazo o cierre no borra el CV/tracking: quedan como material reutilizable para procesos similares.
 - Corre `python3 scripts/conversion_report.py` para tu tasa de conversión real por categoría — se calcula sola desde el frontmatter (`tier`/`advanced`), no hace falta recontar a mano. Si tu percepción de qué tipo de rol te funciona no coincide con este número, confía en el número.
+- Corre `python3 scripts/pipeline_board.py --open` para el tablero visual: columnas por de quién es el siguiente movimiento (no por estado administrativo), agenda de fechas comprometidas, radar de silencio acumulado, una ficha por aplicación activa e histórico de cerradas. Lee `next_action`/`next_date`/`interviewer`/`open_questions` del tracking si están (ver `templates/application-tracking-template.md`) — sin ellos genera igual, solo con menos detalle por tarjeta.
 
 ## Tips
 

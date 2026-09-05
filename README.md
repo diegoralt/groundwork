@@ -55,8 +55,26 @@ Flujo completo por aplicación en `docs/workflow.md`.
 - Detector de prosa que delata redacción de IA (`scripts/check_em_dash_style.py`)
 - Tracking de seguimiento con distinción entre "tienes a quién escribirle" y "solo puedes esperar" (`scripts/followup_check.py`)
 - Cálculo de conversión real por categoría de rol, no por percepción (`scripts/conversion_report.py`)
+- Tablero visual del pipeline (ver sección propia abajo)
 - Cuestionario de bootstrap para construir tu perfil desde cero (`prompts/bootstrap-questionnaire.md`)
 - Práctica de entrevista en vivo, turno por turno (`prompts/mock-interview-prompt.md`)
+
+## Tablero visual del pipeline
+
+Un solo archivo HTML — sin servidor, sin dependencias, se abre con doble clic — que lee `applications/*.md` y contesta la pregunta que importa revisar cada día: **¿qué requiere tu acción, y qué solo puede esperar?**
+
+```bash
+python3 scripts/pipeline_board.py --open
+```
+
+| Vista | Qué muestra |
+|---|---|
+| **Tablero** | Tres columnas — no por estado administrativo, sino por de quién es el siguiente movimiento: tuyo, de ellos, o sin nadie a quien escribirle. Arriba, la agenda de fechas comprometidas en los próximos días. |
+| **Radar** | Una línea de tiempo: a la izquierda lo que lleva callado sin fecha, a la derecha lo comprometido, en la misma escala. |
+| **Ficha** | Detalle por aplicación activa — recorrido de etapas, cobertura del puesto, con quién hablas, material relacionado (CV, tracking), preguntas sin resolver. |
+| **Histórico** | Aplicaciones cerradas, con resumen agregado por desenlace (rechazadas, cerradas sin respuesta, ofertas). |
+
+No necesita nada nuevo: lee el mismo frontmatter de `applications/*-application.md` que ya usan `followup_check.py` y `conversion_report.py`. Los campos `next_action`, `next_date`, `interviewer` y `open_questions` son opcionales (ver `templates/application-tracking-template.md`) — sin ellos el tablero genera igual, solo con menos detalle por tarjeta.
 
 ## Verificar que tu fork funciona
 

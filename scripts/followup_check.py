@@ -9,6 +9,7 @@ escrita en el campo `follow_up` del frontmatter. Este script solo lee y avisa.
 """
 import re
 import sys
+import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
@@ -45,6 +46,7 @@ def load_applications() -> list[dict]:
         fields = parse_frontmatter(path.read_text())
         if fields.get("type") != "application_tracking":
             continue
+        fields["_file"] = path.name  # para que otros consumidores (pipeline_board.py) puedan enlazar al tracking
         apps.append(fields)
     return apps
 
@@ -145,6 +147,18 @@ body
     # un tracking a medio llenar se reporta, no tira el reporte entero
     assert label({}) == "(sin empresa) (sin puesto)"
     assert label(fields) == "Test Co (Test Role)"
+
+    # pipeline_board.py depende de `_file` para enlazar cada tarjeta a su
+    # tracking — sin este assert, quitarla por accidente solo lo atraparía
+    # smoke_test.py (integración), no el self-check de este script
+    global APPLICATIONS_DIR
+    apps_dir_original = APPLICATIONS_DIR
+    with tempfile.TemporaryDirectory() as tmp:
+        APPLICATIONS_DIR = Path(tmp)
+        (APPLICATIONS_DIR / "fixture-application.md").write_text(sample, encoding="utf-8")
+        apps = load_applications()
+        assert apps and apps[0]["_file"] == "fixture-application.md"
+    APPLICATIONS_DIR = apps_dir_original
 
     print("demo ok")
 

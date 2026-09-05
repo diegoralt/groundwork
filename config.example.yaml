@@ -9,7 +9,8 @@ contact:
   linkedin: "https://www.linkedin.com/in/tu-usuario/"
   github: "https://github.com/tu-usuario"
 
-# Categorías de rol para conversion_report.py. Defínelas según tu propio
+# Categorías de rol para conversion_report.py y pipeline_board.py (los chips
+# de filtro del tablero salen de esta misma lista). Defínelas según tu propio
 # mercado objetivo — no copies las de otra persona, las suyas reflejan su
 # carrera, no la tuya. Ejemplo de arranque, bórralo y arma el tuyo:
 tiers:

@@ -86,7 +86,7 @@ def main() -> int:
         assert r.returncode == 0, f"el check de estilo nunca debe bloquear:\n{r.stderr}"
 
         # Fase 4: tracking, con applications/ vacío y con una aplicación real
-        for script in ("scripts/followup_check.py", "scripts/conversion_report.py"):
+        for script in ("scripts/followup_check.py", "scripts/conversion_report.py", "scripts/pipeline_board.py"):
             r = run(fork, script)
             assert r.returncode == 0, f"{script} truena con applications/ vacío:\n{r.stderr}"
 
@@ -104,6 +104,12 @@ def main() -> int:
         assert "Acme (Tech Lead)" in r.stdout, f"la aplicación no se reportó:\n{r.stdout}"
         r = run(fork, "scripts/conversion_report.py")
         assert "1/1 = 100%" in r.stdout, f"conversión mal calculada:\n{r.stdout}"
+
+        r = run(fork, "scripts/pipeline_board.py")
+        assert r.returncode == 0, f"pipeline_board.py truena con applications/ real:\n{r.stderr}"
+        board = (fork / "applications/pipeline.html").read_text()
+        assert "Acme" in board, "el tablero no incluyó la aplicación real"
+        assert 'data-col="mia"' in board, "pending_contact sin next_date debería ser jugada propia"
 
     print(f"smoke test ok — {len(files)} archivos, flujo completo del README")
     return 0

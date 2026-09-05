@@ -11,6 +11,14 @@ date_started: YYYY-MM-DD
 date_submitted: YYYY-MM-DD
 last_updated: YYYY-MM-DD
 tags: [empresa, vacante, área, tipo-rol]
+# Los siguientes campos son opcionales — no rompen nada si faltan, pero
+# scripts/pipeline_board.py (tablero visual, `python3 scripts/pipeline_board.py --open`)
+# los necesita para saber de quién es el siguiente movimiento. Sin `next_action`
+# la tarjeta se genera igual, pero avisa "Sin acción definida".
+next_action: [una línea, verbo primero — ej. "Escribir seguimiento si no hay respuesta para el 12-09"]
+next_date: [YYYY-MM-DD — solo si hay una fecha comprometida (entrevista agendada, plazo de decisión propio). Omitir si no la hay]
+interviewer: [nombre; puesto de quien entrevista; qué esperar de la sesión — hasta tres partes separadas por ";". Omitir si aún no lo sabes]
+open_questions: [preguntas sin resolver de esta aplicación, separadas por ";" — ej. "modalidad y ubicación; a quién reporta el rol"]
 ---
 
 # [Empresa] - [Título del Rol] Application [[STATUS]]
@@ -29,6 +37,8 @@ tags: [empresa, vacante, área, tipo-rol]
 ---
 
 ## Application Status
+
+> `pipeline_board.py` traduce esta tabla al "Recorrido" de la ficha de cada aplicación. Vocabulario completo de estados, además de ✅/⏳/❌: 📅 agendado, 🔄 en curso, 🔴 bloqueado, ⚫ cerrado — cualquier otro emoji se muestra igual, solo sin color.
 
 | Field | Status | Date |
 |-------|--------|------|
