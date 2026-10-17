@@ -114,6 +114,7 @@ def validar_campos(a: dict) -> list[str]:
 
 
 def response_metric(apps: list[dict], corte: date, desde: date | None = None, hasta: date | None = None) -> dict:
+    hasta = hasta or corte + timedelta(days=1)  # por defecto, hasta el día del corte inclusive: nada posterior a la observación
     m = {"universo": [], "inmaduras": [], "maduras": [], "exitos": [], "ambiguas_en_ventana": [],
          "ambiguas": [], "sin_dato": [], "invalidos": [], "sin_fecha_envio": [], "tardias": []}
     for a in apps:
@@ -175,7 +176,7 @@ def _pct(n: int, d: int) -> str:
 def print_response(apps: list[dict], corte: date, desde: date | None, hasta: date | None) -> None:
     m = response_metric(apps, corte, desde, hasta)
     mad, exi = m["maduras"], m["exitos"]
-    rango = f"envíos en [{desde or 'inicio'}, {hasta or 'hoy'})"
+    rango = f"envíos en [{desde or 'inicio'}, {hasta})" if hasta else f"envíos desde {desde or 'inicio'} hasta {corte} inclusive"
     print(f"\nRespuesta humana en {MATURITY_DAYS} días (mínimo documentado) — corte {corte}, {rango}\n")
     print(f"  Resultado: {_pct(len(exi), len(mad))}")
     sens = len(exi) + len(m["ambiguas_en_ventana"])
@@ -361,6 +362,9 @@ def response_demo() -> None:
     assert {a["company"] for a in m1["universo"]} == {a["company"] for a in m2["universo"]}
     assert "dia0" not in {a["company"] for a in m1["universo"]}, "hasta es exclusivo"
     assert response_metric([], C)["maduras"] == []
+    # sin --hasta, un envío posterior al corte (fecha futura o corte histórico) queda fuera del universo
+    futuro = [app("hoy_corte", d(0)), app("futuro", d(-5)), app("viejo", d(30))]
+    assert {a["company"] for a in response_metric(futuro, C)["universo"]} == {"hoy_corte", "viejo"}
     # desglose por cv_version separa dos versiones de una misma base
     groups = {a.get("cv_version") for a in m["maduras"] if a.get("cv_base") == "liderazgo"}
     assert groups == {"aaaaaaaaaaaa", "bbbbbbbbbbbb"}

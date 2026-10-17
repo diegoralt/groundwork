@@ -237,6 +237,9 @@ def medicion_y_agenda(fork: Path) -> None:
     run(fork, "scripts/pipeline_board.py")
     assert 'href="../cvs-pdf/custom.pdf"' in (apps / "pipeline.html").read_text(encoding="utf-8"), \
         "el tablero debe enlazar la ruta registrada en cv_ruta"
+    import re
+    zona = re.search(r'class="zona-cierre" style="width: (-?[\d.]+)%', tablero)
+    assert zona and 0 < float(zona.group(1)) < 58, f"la zona de cierre del radar debe tener ancho positivo: {zona and zona.group(0)}"
     assert 'data-tier="plataforma"' in tablero and "datos por completar" in tablero
 
 

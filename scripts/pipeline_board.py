@@ -680,7 +680,8 @@ def radar(apps: list, today: date) -> str:
     nada queda a la misma vista que lo que sí vas a hacer."""
     e = html.escape
     hoy_pct, futuro_dias = 58.0, 14
-    izq_por_dia = hoy_pct / CLOSE_THRESHOLD_DAYS
+    horizonte = CLOSE_THRESHOLD_DAYS + 15  # la zona de cierre (lo que pasó el umbral) necesita escala propia
+    izq_por_dia = hoy_pct / horizonte
     der_por_dia = (100 - hoy_pct) / futuro_dias
 
     puntos = []
@@ -692,7 +693,7 @@ def radar(apps: list, today: date) -> str:
             color = "oklch(0.58 0.14 25)" if when == today else "oklch(0.58 0.14 155)"
             sello = "hoy" if when == today else fecha_corta(when)
         else:
-            silencio = min(CLOSE_THRESHOLD_DAYS, days or 0)
+            silencio = min(horizonte, days or 0)
             x = max(0.5, hoy_pct - silencio * izq_por_dia)
             if app.get("follow_up") == "no_channel":
                 color = "#8a857b" if silencio >= 0.8 * CLOSE_THRESHOLD_DAYS else "#b3ada2"
@@ -731,7 +732,7 @@ def radar(apps: list, today: date) -> str:
         for i, carril in enumerate(carriles)
     )
     alto = 18 + len(carriles) * 34 + 34
-    cierre = hoy_pct - 60 * izq_por_dia
+    cierre = hoy_pct - CLOSE_THRESHOLD_DAYS * izq_por_dia
 
     return f"""<section class="radar-caja">
   <div class="radar-cab">
