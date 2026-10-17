@@ -35,7 +35,7 @@ Corre esto antes de dar por lista cualquier aplicación. Si usas Claude Code, `/
 
 8. **Sella la revisión** — liga lo que revisaste al CV exacto que vas a enviar:
    ```
-   python3 scripts/review_stamp.py [slug] --preparar --validacion "gaps resueltos y claims revisados contra profile/"
+   python3 scripts/review_stamp.py [slug] --preparar --keywords "kw1,kw2,..." --validacion "gaps resueltos y claims revisados contra profile/"
    ```
    `--preparar` repite cronología y gaps, regenera el PDF desde el Markdown y corre el ATS sobre el PDF nuevo; si los tres salen en 0, escribe en el tracking las huellas SHA-256 del CV, del PDF y de `profile/`, con veredicto "pendiente". Cualquier edición posterior invalida el sello.
 

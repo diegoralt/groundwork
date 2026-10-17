@@ -74,7 +74,10 @@ def sello_y_checks(fork: Path) -> None:
         tracking = tracking.replace(old, new)
     (fork / f"applications/{slug}-application.md").write_text(tracking, encoding="utf-8")
     stamp = ["scripts/review_stamp.py", slug]
-    r = run(fork, *stamp, "--preparar", "--validacion", "smoke: sin gaps, claims sintéticos")
+    assert run(fork, *stamp, "--preparar", "--validacion", "x").returncode == 2, "--preparar exige --keywords"
+    assert run(fork, *stamp, "--preparar", "--keywords", "Kotlin", "--validacion", "x").returncode == 1, \
+        "una keyword requerida ausente del PDF no se sella"
+    r = run(fork, *stamp, "--preparar", "--keywords", rs.DEMO_KEYWORDS, "--validacion", "smoke: sin gaps, claims sintéticos")
     assert r.returncode == 0, f"--preparar falló:\n{r.stdout}{r.stderr}"
     pdf = fork / f"cvs-pdf/{pdf_name}-{slug}.pdf"
     assert pdf.exists(), "el PDF debe llevar contact.name en kebab-case, sin acentos"
@@ -106,7 +109,7 @@ def sello_y_checks(fork: Path) -> None:
     # un '---' entre secciones trunca el PDF (generate_cv_pdf sale en 0 con aviso): no se sella
     (fork / "applications/trunc-application.md").write_text(tracking, encoding="utf-8")
     (fork / "cvs/cv_for_trunc.md").write_text(rs.DEMO_CV + "\n---\n\n## Educación\n\n### Uni\n", encoding="utf-8")
-    r = run(fork, "scripts/review_stamp.py", "trunc", "--preparar", "--validacion", "smoke: truncado")
+    r = run(fork, "scripts/review_stamp.py", "trunc", "--preparar", "--keywords", rs.DEMO_KEYWORDS, "--validacion", "smoke: truncado")
     assert r.returncode != 0 and "PDF truncado" in r.stdout, f"un PDF truncado por '---' no debe sellarse:\n{r.stdout}"
     assert "revision_veredicto" not in (fork / "applications/trunc-application.md").read_text(encoding="utf-8")
 
@@ -115,7 +118,7 @@ def sello_y_checks(fork: Path) -> None:
     (fork / "cvs/cv_for_trans.md").write_text(rs.DEMO_CV, encoding="utf-8")
     prev = ["scripts/review_stamp.py", "trans"]
     for flag in ("--preparar", "--aprobar", "--registrar-envio"):
-        extra = ["--validacion", "smoke: transición"] if flag == "--preparar" else []
+        extra = ["--keywords", rs.DEMO_KEYWORDS, "--validacion", "smoke: transición"] if flag == "--preparar" else []
         assert run(fork, *prev, flag, *extra).returncode == 0, flag
     assert (fork / "cvs-pdf/ada-lovelace-ruiz-trans.pdf").exists()
     assert run(fork, *prev, "--sin-documento", "--validacion", "ahora sin CV").returncode == 0
@@ -172,7 +175,7 @@ def medicion_y_agenda(fork: Path) -> None:
     cv2 = fork / "cvs/cv_for_acme-otro.md"
     cv2.write_text(rs.DEMO_CV + "\n- Bullet distinto.\n", encoding="utf-8")
     stamp2 = ["scripts/review_stamp.py", "acme-otro"]
-    assert run(fork, *stamp2, "--preparar", "--validacion", "smoke: segunda versión").returncode == 0
+    assert run(fork, *stamp2, "--preparar", "--keywords", rs.DEMO_KEYWORDS, "--validacion", "smoke: segunda versión").returncode == 0
     assert run(fork, *stamp2, "--aprobar").returncode == 0
     assert run(fork, *stamp2, "--registrar-envio").returncode == 0
     v1 = rs.read_frontmatter(apps / "acme-tech-lead-application.md")[2]["cv_version"]
@@ -201,6 +204,9 @@ def medicion_y_agenda(fork: Path) -> None:
         "una pausa_hasta inválida no crea pausa vigente"
     assert "pausa venció" not in mala, "una fecha inválida solo avisa dato_invalido, no pausa_vencida"
     assert lineas(sal, "2026-10-31 · PausaFecha"), "la pausa no apaga la fecha comprometida"
+    # screening es un estado activo de la plantilla: su fecha comprometida entra a la agenda
+    nuevo("screen", "ScreenCo", status="screening", date_submitted="2026-08-31", next_date="2026-10-31", next_action="Llamada")
+    assert lineas(seguimiento("2026-10-30"), "2026-10-31 · ScreenCo"), "screening debe contar como activo"
 
     # respuesta humana documentada: cuenta en la ventana de 14 días; desglose por versión de CV
     rs.write_fields(apps / "acme-tech-lead-application.md", {

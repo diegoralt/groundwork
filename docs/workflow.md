@@ -50,7 +50,7 @@ Corre `/review-application [slug]` (Claude Code) o sigue `prompts/review-applica
 2. `ats_check.py` — cobertura de keywords en el PDF final.
 3. `check_em_dash_style.py` — detecta prosa que delata redacción de IA (informativo, no bloquea).
 4. `check_chronological_order.py` y `check_gaps.py` — checks obligatorios sobre el Markdown: cronología inversa estricta y ningún término de la sección "Gaps confirmados" de `profile/skills.md`. Salidas: 0 = OK, 1 = falla, 2 = no evaluado (nunca cuenta como aprobado). `check_star_citation.py` es informativo.
-5. `review_stamp.py [slug] --preparar` — sello de revisión: repite los checks, regenera el PDF y corre el ATS; si todo sale en 0, guarda en el tracking las huellas SHA-256 del CV, del PDF y de `profile/`. Tras tu aprobación explícita, `--aprobar`; antes de subir el CV, `--check`; al enviar, `--registrar-envio` (guarda `cv_version`, las huellas y `date_submitted`). El sello no usa git: `cvs/`, `cvs-pdf/` y `applications/` nunca se commitean, así que la identidad del documento es su huella. Un formulario sin CV usa `--sin-documento`.
+5. `review_stamp.py [slug] --preparar --keywords "..."` — sello de revisión: repite los checks, regenera el PDF y corre el ATS; si todo sale en 0, guarda en el tracking las huellas SHA-256 del CV, del PDF y de `profile/`. Tras tu aprobación explícita, `--aprobar`; antes de subir el CV, `--check`; al enviar, `--registrar-envio` (guarda `cv_version`, las huellas y `date_submitted`). El sello no usa git: `cvs/`, `cvs-pdf/` y `applications/` nunca se commitean, así que la identidad del documento es su huella. Un formulario sin CV usa `--sin-documento`.
 
 Nunca marques una aplicación como lista sin revisar todos los resultados, y la aprobación siempre es tuya.
 

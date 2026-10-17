@@ -43,7 +43,7 @@ REVIEW_CHANNEL_DAYS = 21
 SUGGEST_CLOSE_DAYS = 45
 CHECKER_WINDOW_DAYS = 3
 MEDICION_OBLIGATORIA = ("canal", "fit", "cv_version", "parseo", "minutos_preparacion")
-ACTIVE = {"submitted", "interviewing", "in_progress"}
+ACTIVE = {"submitted", "screening", "interviewing", "in_progress"}
 DATE_FIELDS = ("next_date", "date_submitted", "date_resubmitted", "contacto_empresa_ultimo",
                "respuesta_humana_fecha", "respuesta_auto_fecha", "pausa_hasta", "revision_canal_fecha",
                "actividad_propia_ultima")

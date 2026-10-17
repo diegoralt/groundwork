@@ -251,7 +251,7 @@ OUTPUT = APPLICATIONS_DIR / "pipeline.html"
 CLOSE_THRESHOLD_DAYS = SUGGEST_CLOSE_DAYS
 AGENDA_WINDOW_DAYS = 7
 
-ACTIVE_STATUS = {"interviewing", "submitted", "in_progress"}
+ACTIVE_STATUS = {"interviewing", "submitted", "screening", "in_progress"}
 
 COLUMNS = [
     ("mia", "Tu jugada", "oklch(0.58 0.14 25)"),

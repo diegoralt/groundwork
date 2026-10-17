@@ -32,7 +32,7 @@ Slug: $ARGUMENTS
    - `python3 scripts/check_gaps.py "cvs/cv_for_$ARGUMENTS.md"` (los términos salen de la sección "Gaps confirmados" de `profile/skills.md`; una tabla vacía es válida). Si un término es un falso positivo, la resolución es una línea `gap_resuelto:` en las notas internas del CV; valídala a mano con el usuario contra `profile/`.
    - Informativo, sin bloqueo: `python3 scripts/check_star_citation.py "applications/$ARGUMENTS-application.md"`.
 
-7. Prepara el sello de revisión: `python3 scripts/review_stamp.py $ARGUMENTS --preparar --validacion "<qué se validó a mano>"`. Repite cronología y gaps, regenera el PDF y corre el ATS; si los tres salen en 0 escribe las huellas SHA-256 en el tracking con veredicto "pendiente". Cualquier edición posterior al sello lo invalida.
+7. Prepara el sello de revisión: `python3 scripts/review_stamp.py $ARGUMENTS --preparar --keywords "<las mismas del paso 4>" --validacion "<qué se validó a mano>"`. Repite cronología y gaps, regenera el PDF y corre el ATS; si los tres salen en 0 escribe las huellas SHA-256 en el tracking con veredicto "pendiente". Cualquier edición posterior al sello lo invalida.
 
 8. Presenta: reporte del reviewer (Parte A aplicada / Parte B pendiente de decisión) + ATS-check + check de estilo + checks obligatorios + sello preparado. No marques la aplicación como lista sin aprobación explícita del usuario.
 

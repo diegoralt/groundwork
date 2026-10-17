@@ -3,7 +3,8 @@
 
 Etapas (ver docs/workflow.md, Fase 3):
   --preparar   Al terminar la revisión. Corre cronología y gaps sobre el Markdown,
-               regenera el PDF desde ese Markdown y corre ATS sobre el PDF nuevo.
+               regenera el PDF desde ese Markdown y corre ATS (con --keywords, las
+               requeridas/preferidas del tracking) sobre el PDF nuevo.
                Si los tres salen en 0, escribe en el tracking las huellas (Markdown,
                PDF y contenido de profile/) con veredicto "pendiente".
                No requiere sello previo.
@@ -30,7 +31,7 @@ lo aprobado es lo que se envía.
 `familia` e `idioma` del frontmatter del CV son opcionales: sin ellos, cv_base queda
 "general" y cv_idioma "es". Si los declaras, idioma debe ser es o en.
 
-Uso: review_stamp.py <slug> --preparar --validacion "<texto>" [--cv RUTA --pdf RUTA]
+Uso: review_stamp.py <slug> --preparar --keywords "a,b,c|archivo.txt" --validacion "<texto>" [--cv RUTA --pdf RUTA]
      review_stamp.py <slug> --aprobar | --check
      review_stamp.py <slug> --sin-documento --validacion "<texto>"
      review_stamp.py <slug> --registrar-envio
@@ -57,6 +58,7 @@ FIELDS_DOC = ("revision_veredicto", "revision_fecha", "revision_cv", "revision_p
               "revision_md_sha256", "revision_pdf_sha256", "revision_perfil_sha256",
               "revision_checks", "revision_validacion")
 DEFAULT_FAMILIA, DEFAULT_IDIOMA = "general", "es"
+DEMO_KEYWORDS = "liderazgo,Acme"  # presentes en DEMO_CV
 # huellas y rutas del sello de un CV: no aplican a un envío sin documento
 SELLO_CV_VACIO = {k: "" for k in ("revision_cv", "revision_pdf", "revision_md_sha256",
                                   "revision_pdf_sha256", "revision_perfil_sha256")}
@@ -145,9 +147,13 @@ def scripts_dir(root: Path) -> Path:
     return root / "scripts" if (root / "scripts").is_dir() else SCRIPTS
 
 
-def preparar(root: Path, tracking: Path, cv: Path, pdf: Path, validacion: str) -> int:
+def preparar(root: Path, tracking: Path, cv: Path, pdf: Path, validacion: str, keywords: str) -> int:
     if not validacion.strip():
         print("NO EVALUADO: falta --validacion (resumen de tu validación de gaps resueltos y claims).")
+        return 2
+    if not keywords.strip():
+        print("NO EVALUADO: falta --keywords (requeridas/preferidas del tracking, 'a,b,c' o un .txt); "
+              "sin ellas el ATS no comprueba cobertura sobre el PDF que se sella.")
         return 2
     if read_frontmatter(tracking) is None or not cv.exists():
         print(f"NO EVALUADO: tracking sin frontmatter o CV inexistente ({tracking}, {cv}).")
@@ -168,7 +174,7 @@ def preparar(root: Path, tracking: Path, cv: Path, pdf: Path, validacion: str) -
     if run(str(sd / "generate_cv_pdf.py"), str(cv), str(pdf)) != 0 or not pdf.exists():
         print(f"NO EVALUADO: no se pudo regenerar el PDF {pdf}.")
         return 2
-    ats = run(str(sd / "ats_check.py"), str(pdf), "")
+    ats = run(str(sd / "ats_check.py"), str(pdf), keywords)
     if ats == 2:
         print("NO EVALUADO: ATS no pudo evaluar el PDF regenerado. No se escribió el sello.")
         return 2
@@ -313,7 +319,7 @@ def main(argv: list[str]) -> int:
     cv = cv if cv.is_absolute() else root / cv
     pdf = pdf if pdf.is_absolute() else root / pdf
     if "--preparar" in argv:
-        return preparar(root, tracking, cv, pdf, opt("--validacion") or "")
+        return preparar(root, tracking, cv, pdf, opt("--validacion") or "", opt("--keywords") or "")
     if "--aprobar" in argv:
         return aprobar(root, tracking)
     if "--check" in argv:
@@ -404,22 +410,25 @@ def demo() -> None:
 
         assert main(r + ["--check"]) == 2, "sin sello"
         assert main(r + ["--preparar"]) == 2, "sin --validacion"
-        assert main(r + ["--preparar", "--validacion", "ok", "--cv", "cvs/no_existe.md"]) == 2, "ruta inexistente"
+        assert main(r + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok", "--cv", "cvs/no_existe.md"]) == 2, "ruta inexistente"
         bad = root / "cvs/cv_for_bad.md"
         bad.write_text(DEMO_CV.replace("Abril 2026 - Presente", "2026"), encoding="utf-8")
-        assert main(r + ["--preparar", "--validacion", "ok", "--cv", str(bad)]) == 1, "check en 2 impide preparar"
+        assert main(r + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok", "--cv", str(bad)]) == 1, "check en 2 impide preparar"
         assert "revision_" not in tr.read_text(encoding="utf-8"), "no debe escribir si falla"
         gap = root / "cvs/cv_for_gap.md"
         gap.write_text(DEMO_CV.replace("revisión por pares", "revisión por pares sobre Kubernetes"), encoding="utf-8")
-        assert main(r + ["--preparar", "--validacion", "ok", "--cv", str(gap)]) == 1, "gap colado impide preparar"
+        assert main(r + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok", "--cv", str(gap)]) == 1, "gap colado impide preparar"
 
-        assert main(r + ["--preparar", "--validacion", "sin gaps; claims revisados"]) == 0, "primer sello"
+        assert main(r + ["--preparar", "--validacion", "ok"]) == 2, "sin --keywords"
+        assert main(r + ["--preparar", "--keywords", "liderazgo,Kotlin", "--validacion", "ok"]) == 1, "keyword ausente en el PDF"
+        assert "revision_" not in tr.read_text(encoding="utf-8"), "ATS sin cobertura: no debe sellar"
+        assert main(r + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "sin gaps; claims revisados"]) == 0, "primer sello"
         assert pdf.exists(), "el PDF lleva el nombre de contact.name en kebab-case"
         assert main(r + ["--check"]) == 1, "pendiente no pasa check"
         cv.write_text(DEMO_CV + "\n- Bullet agregado después de preparar.\n", encoding="utf-8")
         assert main(r + ["--aprobar"]) == 1, "Markdown cambiado entre preparar y aprobar"
         cv.write_text(DEMO_CV, encoding="utf-8")
-        assert main(r + ["--preparar", "--validacion", "ok"]) == 0
+        assert main(r + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok"]) == 0
         assert main(r + ["--aprobar"]) == 0
         before = tr.read_text(encoding="utf-8")
         assert main(r + ["--check"]) == 0
@@ -451,7 +460,7 @@ def demo() -> None:
         cv2 = root / "cvs/cv_for_demo2.md"
         cv2.write_text(DEMO_CV.replace("12 personas", "doce personas"), encoding="utf-8")
         r2 = new_tracking(root, "demo2")
-        assert main(r2 + ["--preparar", "--validacion", "ok"]) == 0 and main(r2 + ["--aprobar"]) == 0
+        assert main(r2 + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok"]) == 0 and main(r2 + ["--aprobar"]) == 0
         assert main(r2 + ["--registrar-envio"]) == 0
         assert read_frontmatter(root / "applications/demo2-application.md")[2]["cv_version"] != fm["cv_version"], \
             "dos PDFs distintos deben dar cv_version distintas"
@@ -460,21 +469,21 @@ def demo() -> None:
         sin = root / "cvs/cv_for_sin.md"
         sin.write_text(DEMO_CV.replace("familia: plataforma\n", "").replace("idioma: es\n", ""), encoding="utf-8")
         rs = new_tracking(root, "sin")
-        assert main(rs + ["--preparar", "--validacion", "ok"]) == 0 and main(rs + ["--aprobar"]) == 0
+        assert main(rs + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok"]) == 0 and main(rs + ["--aprobar"]) == 0
         assert main(rs + ["--registrar-envio"]) == 0
         fs = read_frontmatter(root / "applications/sin-application.md")[2]
         assert fs["cv_base"] == DEFAULT_FAMILIA and fs["cv_idioma"] == DEFAULT_IDIOMA, "defaults"
         (root / "cvs/cv_for_fr.md").write_text(DEMO_CV.replace("idioma: es", "idioma: fr"), encoding="utf-8")
         rf = new_tracking(root, "fr")
         antes = (root / "applications/fr-application.md").read_text(encoding="utf-8")
-        assert main(rf + ["--preparar", "--validacion", "ok"]) == 2, "idioma inválido"
+        assert main(rf + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok"]) == 2, "idioma inválido"
         (root / "cvs/cv_for_conf.md").write_text(DEMO_CV, encoding="utf-8")
         rc = new_tracking(root, "conf", "cv_base: otra\n")
-        assert main(rc + ["--preparar", "--validacion", "ok"]) == 2, "conflicto de familia"
+        assert main(rc + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok"]) == 2, "conflicto de familia"
         assert (root / "applications/fr-application.md").read_text(encoding="utf-8") == antes, "no debe escribir"
         (root / "cvs/cv_for_en.md").write_text(DEMO_CV.replace("idioma: es", "idioma: en"), encoding="utf-8")
         re_ = new_tracking(root, "en")
-        assert main(re_ + ["--preparar", "--validacion", "ok"]) == 0 and main(re_ + ["--aprobar"]) == 0
+        assert main(re_ + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok"]) == 0 and main(re_ + ["--aprobar"]) == 0
         assert main(re_ + ["--registrar-envio"]) == 0
         assert read_frontmatter(root / "applications/en-application.md")[2]["cv_idioma"] == "en"
 
@@ -486,7 +495,7 @@ def demo() -> None:
         assert main(rsd + ["--sin-documento", "--validacion", "formulario sin CV"]) == 0
         assert main(rsd + ["--check"]) == 0 and main(rsd + ["--registrar-envio"]) == 0, "sin documento"
         assert read_frontmatter(root / "applications/sd-application.md")[2]["cv_version"] == "no_aplica"
-        assert main(rsd + ["--preparar", "--validacion", "ok", "--cv", "cvs/cv_for_demo.md",
+        assert main(rsd + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok", "--cv", "cvs/cv_for_demo.md",
                            "--pdf", "cvs-pdf/sd.pdf"]) == 0
         assert main(rsd + ["--aprobar"]) == 0 and main(rsd + ["--check"]) == 0, "de sin documento a documento"
 
@@ -531,7 +540,7 @@ def wrapper_demo(root: Path) -> None:
     try:
         for ats, esperado in ((2, 2), (1, 1)):
             globals()["run"] = lambda *a, ats=ats: ats if a[0].endswith("ats_check.py") else real(*a)
-            assert main(r + ["--preparar", "--validacion", "ok"]) == esperado, f"ATS {ats} -> {esperado}"
+            assert main(r + ["--preparar", "--keywords", DEMO_KEYWORDS, "--validacion", "ok"]) == esperado, f"ATS {ats} -> {esperado}"
             assert "revision_" not in tr.read_text(encoding="utf-8"), f"ATS {ats}: no debe sellar"
     finally:
         globals()["run"] = real
