@@ -57,6 +57,9 @@ FIELDS_DOC = ("revision_veredicto", "revision_fecha", "revision_cv", "revision_p
               "revision_md_sha256", "revision_pdf_sha256", "revision_perfil_sha256",
               "revision_checks", "revision_validacion")
 DEFAULT_FAMILIA, DEFAULT_IDIOMA = "general", "es"
+# huellas y rutas del sello de un CV: no aplican a un envío sin documento
+SELLO_CV_VACIO = {k: "" for k in ("revision_cv", "revision_pdf", "revision_md_sha256",
+                                  "revision_pdf_sha256", "revision_perfil_sha256")}
 TRUNCADO = "quedaron fuera del PDF"  # aviso de generate_cv_pdf.py: un '---' se llevó secciones del CV
 
 
@@ -256,7 +259,7 @@ def registrar_envio(root: Path, tracking: Path) -> int:
     if fm.get("revision_documento") == "no aplica":
         # sin documento: la identidad de un CV anterior (ruta, huellas, familia, idioma) ya no aplica
         write_fields(tracking, {"cv_version": "no_aplica", "cv_ruta": "", "cv_sha256": "", "pdf_sha256": "",
-                                "cv_base": "", "cv_idioma": "", **fecha})
+                                "cv_base": "", "cv_idioma": "", **SELLO_CV_VACIO, **fecha})
         print("Registrado: envío sin documento (cv_version: no_aplica).")
         return 0
     cv_rel = fm["revision_cv"]
@@ -286,7 +289,7 @@ def sin_documento(tracking: Path, validacion: str) -> int:
         return 2
     write_fields(tracking, {"revision_documento": "no aplica", "revision_veredicto": "no aplica",
                             "revision_fecha": datetime.date.today().isoformat(),
-                            "revision_validacion": validacion})
+                            "revision_validacion": validacion, **SELLO_CV_VACIO})
     print("Registrado: envío sin documento.")
     return 0
 

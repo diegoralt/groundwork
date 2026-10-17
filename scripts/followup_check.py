@@ -159,7 +159,8 @@ def alertas(app: dict, today: date) -> list[tuple[str, str]]:
     if fu in ("", "unconfirmed"):
         out.append(("sin_auditar", "follow_up sin auditar"))
     pausa = pausa_vigente(app, today)
-    if app.get("pausa_motivo") and not pausa:
+    hasta = parse_date(app.get("pausa_hasta"))
+    if app.get("pausa_motivo") and not pausa and hasta is not None:  # fecha inválida: solo dato_invalido
         out.append(("pausa_vencida", "la pausa venció: revisar"))
     if not pausa and not parse_date(app.get("next_date")) and (
             app.get("advanced") == "yes" or fu in ("waiting", "pending_contact")):

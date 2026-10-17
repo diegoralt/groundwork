@@ -110,13 +110,26 @@ def sello_y_checks(fork: Path) -> None:
     assert r.returncode != 0 and "PDF truncado" in r.stdout, f"un PDF truncado por '---' no debe sellarse:\n{r.stdout}"
     assert "revision_veredicto" not in (fork / "applications/trunc-application.md").read_text(encoding="utf-8")
 
-    # de un envío con CV a uno sin documento: no queda la identidad del CV anterior
-    prev = ["scripts/review_stamp.py", slug]
+    # de un envío con CV a uno sin documento: no queda la identidad ni el sello del CV anterior
+    (fork / "applications/trans-application.md").write_text(tracking, encoding="utf-8")
+    (fork / "cvs/cv_for_trans.md").write_text(rs.DEMO_CV, encoding="utf-8")
+    prev = ["scripts/review_stamp.py", "trans"]
+    for flag in ("--preparar", "--aprobar", "--registrar-envio"):
+        extra = ["--validacion", "smoke: transición"] if flag == "--preparar" else []
+        assert run(fork, *prev, flag, *extra).returncode == 0, flag
+    assert (fork / "cvs-pdf/ada-lovelace-ruiz-trans.pdf").exists()
     assert run(fork, *prev, "--sin-documento", "--validacion", "ahora sin CV").returncode == 0
     assert run(fork, *prev, "--registrar-envio").returncode == 0
-    fm = rs.read_frontmatter(fork / f"applications/{slug}-application.md")[2]
-    assert fm["cv_version"] == "no_aplica" and not any(
-        fm[k] for k in ("cv_ruta", "cv_sha256", "pdf_sha256", "cv_base", "cv_idioma")), fm
+    fm = rs.read_frontmatter(fork / "applications/trans-application.md")[2]
+    assert fm["cv_version"] == "no_aplica" and not any(fm[k] for k in (
+        "cv_ruta", "cv_sha256", "pdf_sha256", "cv_base", "cv_idioma", "revision_cv", "revision_pdf",
+        "revision_md_sha256", "revision_pdf_sha256", "revision_perfil_sha256")), fm
+    assert run(fork, *prev, "--check").returncode == 0
+    sys.path.insert(0, str(fork / "scripts"))
+    import pipeline_board as pb
+    assert not [m for m in pb.material({"_file": "trans-application.md", **fm}) if m[2] == "PDF"], \
+        "un envío sin documento no debe enlazar «CV enviado» (el PDF viejo sigue en disco)"
+    (fork / "applications/trans-application.md").unlink()  # no entra a la cohorte de medicion_y_agenda
 
     # lo sellado nunca se commitea: git debe ignorar todo lo que el sello escribe o lee
     for rel in ("cvs/cv_for_x.md", "cvs-pdf/x.pdf", "applications/x-application.md", "config.yaml"):
@@ -186,6 +199,7 @@ def medicion_y_agenda(fork: Path) -> None:
     mala = " ".join(lineas(seguimiento("2026-10-30"), "PausaMala"))
     assert "fecha inválida en pausa_hasta" in mala and "sin próxima fecha" in mala and "sin contacto" in mala, \
         "una pausa_hasta inválida no crea pausa vigente"
+    assert "pausa venció" not in mala, "una fecha inválida solo avisa dato_invalido, no pausa_vencida"
     assert lineas(sal, "2026-10-31 · PausaFecha"), "la pausa no apaga la fecha comprometida"
 
     # respuesta humana documentada: cuenta en la ventana de 14 días; desglose por versión de CV

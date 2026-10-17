@@ -479,7 +479,9 @@ def material(app: dict) -> list:
         (pdf_ruta, os.path.relpath(pdf_ruta, APPLICATIONS_DIR), "CV enviado", "PDF"),
         (APPLICATIONS_DIR / app["_file"], app["_file"], "Seguimiento completo", "MD"),
     ]
-    return [(href, nombre, tipo) for ruta, href, nombre, tipo in piezas if ruta.is_file()]
+    sin_cv = app.get("cv_version") == "no_aplica"  # envío sin documento: no hay CV que enlazar
+    return [(href, nombre, tipo) for ruta, href, nombre, tipo in piezas
+            if ruta.is_file() and not (sin_cv and tipo == "PDF")]
 
 
 def cuenta_regresiva(when, today: date) -> str:
