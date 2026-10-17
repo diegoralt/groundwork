@@ -79,6 +79,17 @@ def load_gap_rows(skills_md: str) -> dict[str, str] | None:
     return rows
 
 
+def _limite_izq(term: str) -> str:
+    """Frontera de palabra solo si el término empieza con carácter de palabra: '.NET' debe
+    encontrarse dentro de 'ASP.NET'."""
+    return r"(?<!\w)" if re.match(r"\w", term) else ""
+
+
+def _limite_der(term: str) -> str:
+    """Igual por la derecha: 'C++' debe encontrarse dentro de 'C++17'."""
+    return r"(?!\w)" if re.search(r"\w$", term) else ""
+
+
 def line_hash(heading: str, line: str) -> str:
     return hashlib.sha256(f"{heading.strip()}\n{line.strip()}".encode("utf-8")).hexdigest()[:12]
 
@@ -121,7 +132,7 @@ def check(cv_path: str, gaps_path: str) -> int:
         if re.match(r"#{2,3} ", line):
             heading = line
         for term in rows:
-            if re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", line, re.IGNORECASE):
+            if re.search(_limite_izq(term) + re.escape(term) + _limite_der(term), line, re.IGNORECASE):
                 h = line_hash(heading, line)
                 hits.append((term, start + offset + 1, line.strip(), h))
                 seen.setdefault((term, h), []).append(start + offset + 1)
@@ -229,6 +240,10 @@ def demo() -> None:
         assert check(str(x), str(lista)) == 2, "sección sin tabla (lista) debe ser NO EVALUADO, no vacía"
         assert check(str(Path(tmp) / "no_existe.md"), str(gp)) == 2
         assert check(str(x), str(Path(tmp) / "no_existe.md")) == 2
+    # términos con puntuación en el borde: se encuentran dentro de nombres compuestos
+    assert re.search(_limite_izq(".NET") + re.escape(".NET") + _limite_der(".NET"), "Backend ASP.NET Core", re.I)
+    assert re.search(_limite_izq("C++") + re.escape("C++") + _limite_der("C++"), "Código en C++17", re.I)
+    assert not re.search(_limite_izq("Rust") + "Rust" + _limite_der("Rust"), "Trustworthy rusty", re.I), "palabra completa"
     assert list(load_gap_rows(skills_md)) == ["Kubernetes", "Rust"]
     assert load_gap_rows("## Hard Skills\n") is None
     print("\ndemo OK")

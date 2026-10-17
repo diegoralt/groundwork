@@ -59,6 +59,11 @@ def sello_y_checks(fork: Path) -> None:
     assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 2, "sección sin tabla: NO EVALUADO, no vacía"
     skills.write_text(original + "\n| Lideré | 2026-01-01 | sintético |\n", encoding="utf-8")
     assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 1, "un gap presente en el CV debe fallar"
+    skills.write_text(original + "\n| .NET | 2026-01-01 | sintético |\n| C++ | 2026-01-01 | sintético |\n", encoding="utf-8")
+    for linea in ("- Backend en ASP.NET Core.", "- Firmware en C++17."):
+        cv_simbolo = fork / "cvs/cv_for_simbolos.md"
+        cv_simbolo.write_text(rs.DEMO_CV + "\n" + linea + "\n", encoding="utf-8")
+        assert run(fork, "scripts/check_gaps.py", str(cv_simbolo)).returncode == 1, f"gap con símbolo oculto en: {linea}"
     skills.write_text(original, encoding="utf-8")
     assert run(fork, "scripts/check_gaps.py", str(cv), "profile/no_existe.md").returncode == 2
 

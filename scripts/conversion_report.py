@@ -211,8 +211,9 @@ def print_response(apps: list[dict], corte: date, desde: date | None, hasta: dat
         print(f"  Esfuerzo: {sum(v for _, v in mins) / len(exi_con_min):.0f} min por respuesta humana "
               f"({len(mins)}/{len(mad)} con minutos, {len(exi_con_min)} éxitos con dato)")
     cerrados = [a for a in m["universo"] if a.get("status") in CLOSED]  # solo la cohorte, no el histórico
-    reg = [a for a in cerrados if a.get("cierre_causa_origen")]
-    decl = [a for a in reg if a.get("cierre_causa_origen") == "declarada"]
+    valida = lambda a: (a.get("cierre_causa_origen") or "").strip() in VALORES_VALIDOS["cierre_causa_origen"]
+    reg = [a for a in cerrados if valida(a)]  # un valor inválido se avisa aparte y no cuenta como cobertura
+    decl = [a for a in reg if a["cierre_causa_origen"].strip() == "declarada"]
     print(f"  Cierres: causa registrada {_pct(len(reg), len(cerrados))} · declarada por la empresa {_pct(len(decl), len(cerrados))}")
 
 
@@ -363,6 +364,12 @@ def response_demo() -> None:
     # desglose por cv_version separa dos versiones de una misma base
     groups = {a.get("cv_version") for a in m["maduras"] if a.get("cv_base") == "liderazgo"}
     assert groups == {"aaaaaaaaaaaa", "bbbbbbbbbbbb"}
+    cierres = [app("c_ok", d(30), status="rejected", cierre_causa_origen="declarada"),
+               app("c_mal", d(30), status="rejected", cierre_causa_origen="declarada # nota")]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        print_response(cierres, C, None, None)
+    assert "causa registrada 1/2" in buf.getvalue(), "una causa de cierre inválida no cuenta como registrada:\n" + buf.getvalue()
     print_response(apps, C, None, None)  # no debe tronar con 0 éxitos con minutos
 
 
