@@ -53,6 +53,8 @@ Flujo completo por aplicación en `docs/workflow.md`.
 - Revisor de CV independiente, drafter-reviewer (`prompts/cv-reviewer-prompt.md`)
 - Verificación ATS de keywords y legibilidad del PDF (`scripts/ats_check.py`)
 - Detector de prosa que delata redacción de IA (`scripts/check_em_dash_style.py`)
+- Checks obligatorios con salida 0 / 1 / 2 (el 2, "no evaluado", nunca cuenta como aprobado): cronología inversa (`scripts/check_chronological_order.py`) y gaps que nunca deben aparecer en un CV (`scripts/check_gaps.py`, desde la sección "Gaps confirmados" de `profile/skills.md`); más un aviso informativo de historias STAR sin citar (`scripts/check_star_citation.py`)
+- Sello de revisión (`scripts/review_stamp.py`): liga lo que revisaste y aprobaste al CV exacto que envías, por huella SHA-256 del CV, del PDF y de tu perfil — sin git, porque tus CVs nunca se commitean
 - Tracking de seguimiento con distinción entre "tienes a quién escribirle" y "solo puedes esperar" (`scripts/followup_check.py`)
 - Cálculo de conversión real por categoría de rol, no por percepción (`scripts/conversion_report.py`)
 - Tablero visual del pipeline (ver sección propia abajo)
@@ -85,6 +87,7 @@ No necesita nada nuevo: lee el mismo frontmatter de `applications/*-application.
 ```bash
 python3 scripts/smoke_test.py          # flujo completo del Quickstart en un fork limpio
 python3 scripts/ats_check.py --demo    # self-check unitario (cada script tiene el suyo)
+bash scripts/run_demos.sh              # todos los self-checks y el smoke test; sale 1 si alguno falla
 ```
 
 El smoke test copia solo los archivos versionados a un directorio temporal, sigue este README al pie de la letra y verifica que el PDF salga completo. Córrelo si tocas los scripts o el template.

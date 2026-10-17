@@ -36,6 +36,74 @@ def run(fork: Path, *cmd: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, *cmd], cwd=fork, capture_output=True, text=True)
 
 
+def sello_y_checks(fork: Path) -> None:
+    """Checks obligatorios y sello de revisión en un fork con la config de OTRO usuario
+    (nombre con acentos y espacios, tier propio), sin ningún commit de datos."""
+    sys.path.insert(0, str(fork / "scripts"))
+    import review_stamp as rs  # copia del fork, no la del repo
+
+    (fork / "config.yaml").write_text(rs.DEMO_CONFIG, encoding="utf-8")
+    pdf_name = "ada-lovelace-ruiz"  # kebab de "Ada Lóvelace Ruiz"
+    cv = fork / "cvs/cv_for_acme-tech-lead.md"
+    cv.write_text(rs.DEMO_CV, encoding="utf-8")
+
+    # gaps: tabla vacía del template público -> 0 (no es "no evaluado")
+    r = run(fork, "scripts/check_gaps.py", str(cv))
+    assert r.returncode == 0 and "Sin gaps confirmados" in r.stdout, f"tabla de gaps vacía debe ser OK:\n{r.stdout}"
+    # sección ausente o archivo ilegible -> 2; fila sintética que aparece en el CV -> 1
+    skills = fork / "profile/skills.md"
+    original = skills.read_text(encoding="utf-8")
+    skills.write_text("## Hard Skills\n- Python\n", encoding="utf-8")
+    assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 2, "sin la sección de gaps: NO EVALUADO"
+    skills.write_text(original + "\n| Lideré | 2026-01-01 | sintético |\n", encoding="utf-8")
+    assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 1, "un gap presente en el CV debe fallar"
+    skills.write_text(original, encoding="utf-8")
+    assert run(fork, "scripts/check_gaps.py", str(cv), "profile/no_existe.md").returncode == 2
+
+    # cronología: el template sin llenar no puede aprobar
+    r = run(fork, "scripts/check_chronological_order.py", "templates/cv-template.md")
+    assert r.returncode == 2, "el template con [Mes Año] sin llenar debe ser NO EVALUADO"
+    assert run(fork, "scripts/check_chronological_order.py", str(cv)).returncode == 0
+
+    # sello: recorrido completo desde la plantilla pública del tracking
+    tracking = (fork / "templates/application-tracking-template.md").read_text(encoding="utf-8")
+    slug = "acme-tech-lead"
+    for old, new in [("[Empresa]", "Acme"), ("[Título del Rol]", "Líder técnica")]:
+        tracking = tracking.replace(old, new)
+    (fork / f"applications/{slug}-application.md").write_text(tracking, encoding="utf-8")
+    stamp = ["scripts/review_stamp.py", slug]
+    r = run(fork, *stamp, "--preparar", "--validacion", "smoke: sin gaps, claims sintéticos")
+    assert r.returncode == 0, f"--preparar falló:\n{r.stdout}{r.stderr}"
+    pdf = fork / f"cvs-pdf/{pdf_name}-{slug}.pdf"
+    assert pdf.exists(), "el PDF debe llevar contact.name en kebab-case, sin acentos"
+    assert run(fork, *stamp, "--check").returncode == 1, "pendiente no pasa --check"
+    assert run(fork, *stamp, "--aprobar").returncode == 0
+    assert run(fork, *stamp, "--check").returncode == 0
+    r = run(fork, *stamp, "--registrar-envio")
+    assert r.returncode == 0, f"--registrar-envio falló:\n{r.stdout}"
+    fm = rs.read_frontmatter(fork / f"applications/{slug}-application.md")[2]
+    assert fm["cv_version"] == fm["revision_pdf_sha256"][:12] and fm["cv_base"] == "plataforma", fm
+    assert fm["date_submitted"], "el registro del envío fija date_submitted si estaba vacía"
+    # invalidación: editar el CV, el PDF o el perfil después de aprobar
+    cv.write_text(rs.DEMO_CV + "\n- Bullet agregado después de aprobar.\n", encoding="utf-8")
+    assert run(fork, *stamp, "--check").returncode == 1, "editar el CV invalida el sello"
+    cv.write_text(rs.DEMO_CV, encoding="utf-8")
+    assert run(fork, *stamp, "--check").returncode == 0
+    (fork / "profile/experience.md").write_text("otro perfil\n", encoding="utf-8")
+    assert run(fork, *stamp, "--check").returncode == 1, "editar el perfil invalida el sello"
+    # envío sin documento
+    (fork / "applications/formulario-application.md").write_text(tracking, encoding="utf-8")
+    sd = ["scripts/review_stamp.py", "formulario"]
+    assert run(fork, *sd, "--sin-documento", "--validacion", "formulario sin CV").returncode == 0
+    assert run(fork, *sd, "--registrar-envio").returncode == 0
+    assert run(fork, *sd, "--check").returncode == 0
+
+    # lo sellado nunca se commitea: git debe ignorar todo lo que el sello escribe o lee
+    for rel in ("cvs/cv_for_x.md", "cvs-pdf/x.pdf", "applications/x-application.md", "config.yaml"):
+        r = subprocess.run(["git", "-C", str(REPO_ROOT), "check-ignore", "-q", rel])
+        assert r.returncode == 0, f"{rel} no está ignorado: el sello podría publicar datos"
+
+
 def main() -> int:
     files = tracked_files()
     assert "templates/cv-template.md" in files, "el template del CV no llega al fork"
@@ -110,6 +178,8 @@ def main() -> int:
         board = (fork / "applications/pipeline.html").read_text()
         assert "Acme" in board, "el tablero no incluyó la aplicación real"
         assert 'data-col="mia"' in board, "pending_contact sin next_date debería ser jugada propia"
+
+        sello_y_checks(fork)
 
     print(f"smoke test ok — {len(files)} archivos, flujo completo del README")
     return 0

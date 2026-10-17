@@ -8,7 +8,7 @@ Lee y sigue `prompts/system-prompt.md` — ahí está la regla central (todo dat
 
 ## Comandos disponibles
 
-- **`/review-application [slug]`** — corre el agente `cv-reviewer` + `ats_check.py` + `check_em_dash_style.py` sobre una aplicación, antes de enviarla. Automatiza `prompts/review-application-checklist.md`.
+- **`/review-application [slug]`** — corre el agente `cv-reviewer` + `ats_check.py` + `check_em_dash_style.py` + los checks de cronología y gaps, y prepara el sello (`review_stamp.py`), sobre una aplicación, antes de enviarla. Automatiza `prompts/review-application-checklist.md`.
 - **`/mock-interview [slug opcional]`** — práctica de entrevista en vivo, turno por turno, en la misma conversación (nunca delegada a un subagente). Automatiza `prompts/mock-interview-prompt.md`.
 - **`/bootstrap`** — cuestionario guiado para construir `profile/experience.md` desde cero. Automatiza `prompts/bootstrap-questionnaire.md`.
 
