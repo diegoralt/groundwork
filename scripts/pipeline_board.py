@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 import subprocess
 import sys
@@ -466,13 +467,16 @@ def fit_level(texto: str) -> str:
 def material(app: dict) -> list:
     """Enlaces al material real de la aplicación, por existencia de archivo —
     no se listan enlaces rotos. `cvs-pdf/` es hermana de `applications/` (ver
-    .gitignore), no está anidada, así que su href necesita subir un nivel. El PDF se
-    llama como lo escribe el sello (review_stamp.py): `<contact.name en kebab>-<slug>.pdf`."""
+    .gitignore), no está anidada, así que su href necesita subir un nivel. El PDF es el
+    registrado en el tracking (`cv_ruta` del envío, o `revision_pdf` del sello); sin ninguno, el
+    nombre por defecto del sello (review_stamp.py): `<contact.name en kebab>-<slug>.pdf`."""
     slug = app["_file"].replace("-application.md", "")
-    pdf = f"{kebab(load_config()['contact']['name'])}-{slug}.pdf"
+    registrado = (app.get("cv_ruta") or app.get("revision_pdf") or "").strip()
+    pdf_ruta = Path(registrado) if registrado else Path("cvs-pdf") / f"{kebab(load_config()['contact']['name'])}-{slug}.pdf"
+    pdf_ruta = pdf_ruta if pdf_ruta.is_absolute() else REPO_ROOT / pdf_ruta
     piezas = [
         (APPLICATIONS_DIR / f"{slug}-prep.md", f"{slug}-prep.md", "Preparación de la sesión", "MD"),
-        (REPO_ROOT / "cvs-pdf" / pdf, f"../cvs-pdf/{pdf}", "CV enviado", "PDF"),
+        (pdf_ruta, os.path.relpath(pdf_ruta, APPLICATIONS_DIR), "CV enviado", "PDF"),
         (APPLICATIONS_DIR / app["_file"], app["_file"], "Seguimiento completo", "MD"),
     ]
     return [(href, nombre, tipo) for ruta, href, nombre, tipo in piezas if ruta.is_file()]

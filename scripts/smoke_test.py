@@ -55,6 +55,8 @@ def sello_y_checks(fork: Path) -> None:
     original = skills.read_text(encoding="utf-8")
     skills.write_text("## Hard Skills\n- Python\n", encoding="utf-8")
     assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 2, "sin la sección de gaps: NO EVALUADO"
+    skills.write_text("## Gaps confirmados\n\n- Kubernetes: solo teoría\n", encoding="utf-8")
+    assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 2, "sección sin tabla: NO EVALUADO, no vacía"
     skills.write_text(original + "\n| Lideré | 2026-01-01 | sintético |\n", encoding="utf-8")
     assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 1, "un gap presente en el CV debe fallar"
     skills.write_text(original, encoding="utf-8")
@@ -100,6 +102,21 @@ def sello_y_checks(fork: Path) -> None:
     assert run(fork, *sd, "--sin-documento", "--validacion", "formulario sin CV").returncode == 0
     assert run(fork, *sd, "--registrar-envio").returncode == 0
     assert run(fork, *sd, "--check").returncode == 0
+
+    # un '---' entre secciones trunca el PDF (generate_cv_pdf sale en 0 con aviso): no se sella
+    (fork / "applications/trunc-application.md").write_text(tracking, encoding="utf-8")
+    (fork / "cvs/cv_for_trunc.md").write_text(rs.DEMO_CV + "\n---\n\n## Educación\n\n### Uni\n", encoding="utf-8")
+    r = run(fork, "scripts/review_stamp.py", "trunc", "--preparar", "--validacion", "smoke: truncado")
+    assert r.returncode != 0 and "PDF truncado" in r.stdout, f"un PDF truncado por '---' no debe sellarse:\n{r.stdout}"
+    assert "revision_veredicto" not in (fork / "applications/trunc-application.md").read_text(encoding="utf-8")
+
+    # de un envío con CV a uno sin documento: no queda la identidad del CV anterior
+    prev = ["scripts/review_stamp.py", slug]
+    assert run(fork, *prev, "--sin-documento", "--validacion", "ahora sin CV").returncode == 0
+    assert run(fork, *prev, "--registrar-envio").returncode == 0
+    fm = rs.read_frontmatter(fork / f"applications/{slug}-application.md")[2]
+    assert fm["cv_version"] == "no_aplica" and not any(
+        fm[k] for k in ("cv_ruta", "cv_sha256", "pdf_sha256", "cv_base", "cv_idioma")), fm
 
     # lo sellado nunca se commitea: git debe ignorar todo lo que el sello escribe o lee
     for rel in ("cvs/cv_for_x.md", "cvs-pdf/x.pdf", "applications/x-application.md", "config.yaml"):
@@ -165,6 +182,10 @@ def medicion_y_agenda(fork: Path) -> None:
     assert not [l for l in lineas(sal, "PausaCon") if "sin próxima fecha" in l or "sin contacto" in l], sal
     sin = " ".join(lineas(sal, "PausaSin"))
     assert "sin próxima fecha" in sin and "sin contacto de la empresa" in sin, sal
+    nuevo("pausa-mala", "PausaMala", date_submitted="2026-10-08", pausa_motivo="x", pausa_hasta="2026-09-30 # nota")
+    mala = " ".join(lineas(seguimiento("2026-10-30"), "PausaMala"))
+    assert "fecha inválida en pausa_hasta" in mala and "sin próxima fecha" in mala and "sin contacto" in mala, \
+        "una pausa_hasta inválida no crea pausa vigente"
     assert lineas(sal, "2026-10-31 · PausaFecha"), "la pausa no apaga la fecha comprometida"
 
     # respuesta humana documentada: cuenta en la ventana de 14 días; desglose por versión de CV
@@ -186,6 +207,11 @@ def medicion_y_agenda(fork: Path) -> None:
     assert r.returncode == 0, r.stderr
     tablero = (apps / "pipeline.html").read_text(encoding="utf-8")
     assert 'href="../cvs-pdf/ada-lovelace-ruiz-acme-tech-lead.pdf"' in tablero, "el enlace al PDF no usa contact.name"
+    (fork / "cvs-pdf/custom.pdf").write_bytes((fork / "cvs-pdf/ada-lovelace-ruiz-acme-tech-lead.pdf").read_bytes())
+    rs.write_fields(otro, {"cv_ruta": "cvs-pdf/custom.pdf"})
+    run(fork, "scripts/pipeline_board.py")
+    assert 'href="../cvs-pdf/custom.pdf"' in (apps / "pipeline.html").read_text(encoding="utf-8"), \
+        "el tablero debe enlazar la ruta registrada en cv_ruta"
     assert 'data-tier="plataforma"' in tablero and "datos por completar" in tablero
 
 

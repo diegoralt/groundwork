@@ -124,8 +124,11 @@ def resolve_anchor_date(app: dict) -> str:
 def pausa_vigente(app: dict, today: date) -> bool:
     if not app.get("pausa_motivo"):
         return False
-    hasta = parse_date(app.get("pausa_hasta"))
-    return hasta is None or hasta >= today
+    crudo = (app.get("pausa_hasta") or "").strip()
+    if not crudo:
+        return True  # pausa sin vencimiento
+    hasta = parse_date(crudo)
+    return hasta is not None and hasta >= today  # fecha inválida: no hay pausa vigente (dato_invalido avisa)
 
 
 def agenda(apps: list, today: date, ventana: int) -> list:

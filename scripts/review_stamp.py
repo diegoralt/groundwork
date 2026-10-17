@@ -57,6 +57,7 @@ FIELDS_DOC = ("revision_veredicto", "revision_fecha", "revision_cv", "revision_p
               "revision_md_sha256", "revision_pdf_sha256", "revision_perfil_sha256",
               "revision_checks", "revision_validacion")
 DEFAULT_FAMILIA, DEFAULT_IDIOMA = "general", "es"
+TRUNCADO = "quedaron fuera del PDF"  # aviso de generate_cv_pdf.py: un '---' se llevó secciones del CV
 
 
 def kebab(s: str) -> str:
@@ -108,6 +109,10 @@ def write_fields(path: Path, fields: dict[str, str]) -> None:
 def run(*args: str) -> int:
     """Corre un script con este intérprete; si falla, muestra la causa (stderr, o stdout si stderr está vacío)."""
     r = subprocess.run([sys.executable, *args], capture_output=True, text=True)
+    if not r.returncode and TRUNCADO in r.stderr:  # sale en 0 pero descartó contenido: no se sella
+        aviso = next(l for l in r.stderr.splitlines() if TRUNCADO in l)
+        print(f"  ↳ {Path(args[0]).name} (PDF truncado): {aviso.strip()}")
+        return 1
     if r.returncode:
         lineas = [l for l in (r.stderr.strip() or r.stdout.strip()).splitlines() if l.strip()]
         if lineas:
@@ -249,7 +254,9 @@ def registrar_envio(root: Path, tracking: Path) -> int:
     hoy = datetime.date.today().isoformat()
     fecha = {} if fm.get("date_submitted", "").strip() else {"date_submitted": hoy}
     if fm.get("revision_documento") == "no aplica":
-        write_fields(tracking, {"cv_version": "no_aplica", **fecha})
+        # sin documento: la identidad de un CV anterior (ruta, huellas, familia, idioma) ya no aplica
+        write_fields(tracking, {"cv_version": "no_aplica", "cv_ruta": "", "cv_sha256": "", "pdf_sha256": "",
+                                "cv_base": "", "cv_idioma": "", **fecha})
         print("Registrado: envío sin documento (cv_version: no_aplica).")
         return 0
     cv_rel = fm["revision_cv"]

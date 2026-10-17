@@ -60,7 +60,7 @@ def split_body_notes(md: str) -> tuple[int, list[str], str]:
 
 def load_gap_rows(skills_md: str) -> dict[str, str] | None:
     """{término: fila completa} de la tabla bajo SECTION_TITLE; {} si la tabla está
-    vacía; None si la sección no existe."""
+    vacía; None si la sección no existe o no trae una tabla con encabezado reconocible."""
     m = re.search(r"^" + re.escape(SECTION_TITLE) + r".*$", skills_md, re.MULTILINE)
     if not m:
         return None
@@ -68,6 +68,9 @@ def load_gap_rows(skills_md: str) -> dict[str, str] | None:
     nxt = re.search(r"^## ", rest, re.MULTILINE)
     section = rest[: nxt.start()] if nxt else rest
     rows = {}
+    if not any((c := re.match(r"\|\s*([^|]+?)\s*\|", l)) and c.group(1).strip() in HEADER_CELLS
+               for l in section.splitlines()):
+        return None  # p. ej. una lista "- Kubernetes: solo teoría": no se puede evaluar, no es "sin gaps"
     for line in section.splitlines():
         cell = re.match(r"\|\s*([^|]+?)\s*\|", line)
         if not cell or cell.group(1).strip() in HEADER_CELLS or set(cell.group(1).strip()) <= {"-", ":"}:
@@ -221,6 +224,9 @@ def demo() -> None:
         sin = Path(tmp) / "sin_seccion.md"
         sin.write_text("## Hard Skills\n- Python\n", encoding="utf-8")
         assert check(str(x), str(sin)) == 2, "fuente sin la sección debe ser NO EVALUADO"
+        lista = Path(tmp) / "lista.md"
+        lista.write_text("## Gaps confirmados\n\n- Kubernetes: solo teoría\n", encoding="utf-8")
+        assert check(str(x), str(lista)) == 2, "sección sin tabla (lista) debe ser NO EVALUADO, no vacía"
         assert check(str(Path(tmp) / "no_existe.md"), str(gp)) == 2
         assert check(str(x), str(Path(tmp) / "no_existe.md")) == 2
     assert list(load_gap_rows(skills_md)) == ["Kubernetes", "Rust"]
