@@ -36,6 +36,226 @@ def run(fork: Path, *cmd: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, *cmd], cwd=fork, capture_output=True, text=True)
 
 
+def sello_y_checks(fork: Path) -> None:
+    """Checks obligatorios y sello de revisión en un fork con la config de OTRO usuario
+    (nombre con acentos y espacios, tier propio), sin ningún commit de datos."""
+    sys.path.insert(0, str(fork / "scripts"))
+    import review_stamp as rs  # copia del fork, no la del repo
+
+    (fork / "config.yaml").write_text(rs.DEMO_CONFIG, encoding="utf-8")
+    pdf_name = "ada-lovelace-ruiz"  # kebab de "Ada Lóvelace Ruiz"
+    cv = fork / "cvs/cv_for_acme-tech-lead.md"
+    cv.write_text(rs.DEMO_CV, encoding="utf-8")
+
+    # gaps: tabla vacía del template público -> 0 (no es "no evaluado")
+    r = run(fork, "scripts/check_gaps.py", str(cv))
+    assert r.returncode == 0 and "Sin gaps confirmados" in r.stdout, f"tabla de gaps vacía debe ser OK:\n{r.stdout}"
+    # sección ausente o archivo ilegible -> 2; fila sintética que aparece en el CV -> 1
+    skills = fork / "profile/skills.md"
+    original = skills.read_text(encoding="utf-8")
+    skills.write_text("## Hard Skills\n- Python\n", encoding="utf-8")
+    assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 2, "sin la sección de gaps: NO EVALUADO"
+    skills.write_text("## Gaps confirmados\n\n- Kubernetes: solo teoría\n", encoding="utf-8")
+    assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 2, "sección sin tabla: NO EVALUADO, no vacía"
+    skills.write_text(original + "\n| Lideré | 2026-01-01 | sintético |\n", encoding="utf-8")
+    assert run(fork, "scripts/check_gaps.py", str(cv)).returncode == 1, "un gap presente en el CV debe fallar"
+    skills.write_text(original + "\n| .NET | 2026-01-01 | sintético |\n| C++ | 2026-01-01 | sintético |\n", encoding="utf-8")
+    for linea in ("- Backend en ASP.NET Core.", "- Firmware en C++17."):
+        cv_simbolo = fork / "cvs/cv_for_simbolos.md"
+        cv_simbolo.write_text(rs.DEMO_CV + "\n" + linea + "\n", encoding="utf-8")
+        assert run(fork, "scripts/check_gaps.py", str(cv_simbolo)).returncode == 1, f"gap con símbolo oculto en: {linea}"
+    skills.write_text(original, encoding="utf-8")
+    assert run(fork, "scripts/check_gaps.py", str(cv), "profile/no_existe.md").returncode == 2
+
+    # cronología: el template sin llenar no puede aprobar
+    r = run(fork, "scripts/check_chronological_order.py", "templates/cv-template.md")
+    assert r.returncode == 2, "el template con [Mes Año] sin llenar debe ser NO EVALUADO"
+    assert run(fork, "scripts/check_chronological_order.py", str(cv)).returncode == 0
+
+    # sello: recorrido completo desde la plantilla pública del tracking
+    tracking = (fork / "templates/application-tracking-template.md").read_text(encoding="utf-8")
+    slug = "acme-tech-lead"
+    for old, new in [("[Empresa]", "Acme"), ("[Título del Rol]", "Líder técnica")]:
+        tracking = tracking.replace(old, new)
+    (fork / f"applications/{slug}-application.md").write_text(tracking, encoding="utf-8")
+    stamp = ["scripts/review_stamp.py", slug]
+    assert run(fork, *stamp, "--preparar", "--validacion", "x").returncode == 2, "--preparar exige --keywords"
+    assert run(fork, *stamp, "--preparar", "--keywords", "Kotlin", "--validacion", "x").returncode == 1, \
+        "una keyword requerida ausente del PDF no se sella"
+    r = run(fork, *stamp, "--preparar", "--keywords", rs.DEMO_KEYWORDS, "--validacion", "smoke: sin gaps, claims sintéticos")
+    assert r.returncode == 0, f"--preparar falló:\n{r.stdout}{r.stderr}"
+    pdf = fork / f"cvs-pdf/{pdf_name}-{slug}.pdf"
+    assert pdf.exists(), "el PDF debe llevar contact.name en kebab-case, sin acentos"
+    assert run(fork, *stamp, "--check").returncode == 1, "pendiente no pasa --check"
+    assert run(fork, *stamp, "--aprobar").returncode == 0
+    assert run(fork, *stamp, "--check").returncode == 0
+    r = run(fork, *stamp, "--registrar-envio")
+    assert r.returncode == 0, f"--registrar-envio falló:\n{r.stdout}"
+    fm = rs.read_frontmatter(fork / f"applications/{slug}-application.md")[2]
+    assert fm["cv_version"] == fm["revision_pdf_sha256"][:12] and fm["cv_base"] == "plataforma", fm
+    assert fm["date_submitted"] and fm["date_submitted"][0].isdigit(), "el registro fija date_submitted si estaba vacía o era el placeholder"
+    # invalidación: editar el CV, el PDF o el perfil después de aprobar
+    cv.write_text(rs.DEMO_CV + "\n- Bullet agregado después de aprobar.\n", encoding="utf-8")
+    assert run(fork, *stamp, "--check").returncode == 1, "editar el CV invalida el sello"
+    cv.write_text(rs.DEMO_CV, encoding="utf-8")
+    assert run(fork, *stamp, "--check").returncode == 0
+    experiencia = fork / "profile/experience.md"
+    original_exp = experiencia.read_text(encoding="utf-8")
+    experiencia.write_text("otro perfil\n", encoding="utf-8")
+    assert run(fork, *stamp, "--check").returncode == 1, "editar el perfil invalida el sello"
+    experiencia.write_text(original_exp, encoding="utf-8")
+    # envío sin documento
+    (fork / "applications/formulario-application.md").write_text(tracking, encoding="utf-8")
+    sd = ["scripts/review_stamp.py", "formulario"]
+    assert run(fork, *sd, "--sin-documento", "--validacion", "formulario sin CV").returncode == 0
+    assert run(fork, *sd, "--registrar-envio").returncode == 0
+    assert run(fork, *sd, "--check").returncode == 0
+
+    # un '---' entre secciones trunca el PDF (generate_cv_pdf sale en 0 con aviso): no se sella
+    (fork / "applications/trunc-application.md").write_text(tracking, encoding="utf-8")
+    (fork / "cvs/cv_for_trunc.md").write_text(rs.DEMO_CV + "\n---\n\n## Educación\n\n### Uni\n", encoding="utf-8")
+    r = run(fork, "scripts/review_stamp.py", "trunc", "--preparar", "--keywords", rs.DEMO_KEYWORDS, "--validacion", "smoke: truncado")
+    assert r.returncode != 0 and "PDF truncado" in r.stdout, f"un PDF truncado por '---' no debe sellarse:\n{r.stdout}"
+    assert "revision_veredicto" not in (fork / "applications/trunc-application.md").read_text(encoding="utf-8")
+
+    # de un envío con CV a uno sin documento: no queda la identidad ni el sello del CV anterior
+    (fork / "applications/trans-application.md").write_text(tracking, encoding="utf-8")
+    (fork / "cvs/cv_for_trans.md").write_text(rs.DEMO_CV, encoding="utf-8")
+    prev = ["scripts/review_stamp.py", "trans"]
+    for flag in ("--preparar", "--aprobar", "--registrar-envio"):
+        extra = ["--keywords", rs.DEMO_KEYWORDS, "--validacion", "smoke: transición"] if flag == "--preparar" else []
+        assert run(fork, *prev, flag, *extra).returncode == 0, flag
+    assert (fork / "cvs-pdf/ada-lovelace-ruiz-trans.pdf").exists()
+    assert run(fork, *prev, "--sin-documento", "--validacion", "ahora sin CV").returncode == 0
+    assert run(fork, *prev, "--registrar-envio").returncode == 0
+    fm = rs.read_frontmatter(fork / "applications/trans-application.md")[2]
+    assert fm["cv_version"] == "no_aplica" and not any(fm[k] for k in (
+        "cv_ruta", "cv_sha256", "pdf_sha256", "cv_base", "cv_idioma", "revision_cv", "revision_pdf",
+        "revision_md_sha256", "revision_pdf_sha256", "revision_perfil_sha256")), fm
+    assert run(fork, *prev, "--check").returncode == 0
+    sys.path.insert(0, str(fork / "scripts"))
+    import pipeline_board as pb
+    assert not [m for m in pb.material({"_file": "trans-application.md", **fm}) if m[2] == "PDF"], \
+        "un envío sin documento no debe enlazar «CV enviado» (el PDF viejo sigue en disco)"
+    (fork / "applications/trans-application.md").unlink()  # no entra a la cohorte de medicion_y_agenda
+
+    # date_submitted con el placeholder de la plantilla anterior se reemplaza; una fecha válida se conserva
+    for previo, esperado in (("YYYY-MM-DD", None), ("2026-09-15", "2026-09-15")):
+        (fork / "applications/fecha-application.md").write_text(tracking, encoding="utf-8")
+        rs.write_fields(fork / "applications/fecha-application.md", {"date_submitted": previo})
+        f = ["scripts/review_stamp.py", "fecha"]
+        assert run(fork, *f, "--sin-documento", "--validacion", "x").returncode == 0
+        assert run(fork, *f, "--registrar-envio").returncode == 0
+        valor = rs.read_frontmatter(fork / "applications/fecha-application.md")[2]["date_submitted"]
+        assert valor == (esperado or __import__("datetime").date.today().isoformat()), (previo, valor)
+    (fork / "applications/fecha-application.md").unlink()
+
+    # lo sellado nunca se commitea: git debe ignorar todo lo que el sello escribe o lee
+    for rel in ("cvs/cv_for_x.md", "cvs-pdf/x.pdf", "applications/x-application.md", "config.yaml"):
+        r = subprocess.run(["git", "-C", str(REPO_ROOT), "check-ignore", "-q", rel])
+        assert r.returncode == 0, f"{rel} no está ignorado: el sello podría publicar datos"
+
+
+def medicion_y_agenda(fork: Path) -> None:
+    """Esquema único de tracking de punta a punta: la plantilla pública y el sello producen lo que
+    leen followup_check, conversion_report y pipeline_board, con la config de OTRO usuario
+    (tier propio, nombre con acentos, cohort_start que YAML lee como fecha)."""
+    import datetime
+    import review_stamp as rs
+
+    hoy = datetime.date.today()
+    corte = hoy + datetime.timedelta(days=20)
+    (fork / "config.yaml").write_text(rs.DEMO_CONFIG + "cohort_start: 2026-09-01\n", encoding="utf-8")
+    apps = fork / "applications"
+    plantilla = (fork / "templates/application-tracking-template.md").read_text(encoding="utf-8")
+
+    def nuevo(slug: str, empresa: str, **campos) -> Path:
+        path = apps / f"{slug}-application.md"
+        path.write_text(plantilla.replace("[Empresa]", empresa).replace("[Título del Rol]", "Rol"), encoding="utf-8")
+        rs.write_fields(path, {"status": "submitted", "follow_up": "waiting", "tier": "plataforma",
+                               "advanced": "no", **campos})
+        return path
+
+    def lineas(salida: str, nombre: str) -> list[str]:
+        return [l for l in salida.splitlines() if nombre in l]
+
+    seguimiento = lambda dia: run(fork, "scripts/followup_check.py", "--hoy", dia).stdout
+    assert run(fork, "scripts/followup_check.py", "--hoy", "2026-13-01").returncode == 2, "--hoy inválido no usa la fecha real"
+    assert run(fork, "scripts/followup_check.py", "--hoy").returncode == 2, "--hoy sin valor"
+
+    # identidad: el sello llena cv_version y date_submitted; solo faltan los campos que llena el usuario
+    sal = seguimiento(corte.isoformat())
+    assert "faltan: canal, fit, parseo, minutos_preparacion" in sal and "cv_version" not in sal, sal
+    assert "dato_invalido" not in sal and "fecha inválida" not in sal, "la plantilla no deja fechas inválidas"
+
+    # dos versiones de CV distinguibles, a partir de la misma plantilla y el mismo sello
+    otro = nuevo("acme-otro", "Acme")
+    cv2 = fork / "cvs/cv_for_acme-otro.md"
+    cv2.write_text(rs.DEMO_CV + "\n- Bullet distinto.\n", encoding="utf-8")
+    stamp2 = ["scripts/review_stamp.py", "acme-otro"]
+    assert run(fork, *stamp2, "--preparar", "--keywords", rs.DEMO_KEYWORDS, "--validacion", "smoke: segunda versión").returncode == 0
+    assert run(fork, *stamp2, "--aprobar").returncode == 0
+    assert run(fork, *stamp2, "--registrar-envio").returncode == 0
+    v1 = rs.read_frontmatter(apps / "acme-tech-lead-application.md")[2]["cv_version"]
+    v2 = rs.read_frontmatter(otro)[2]["cv_version"]
+    sd = rs.read_frontmatter(apps / "formulario-application.md")[2]["cv_version"]
+    assert len({v1, v2}) == 2 and sd == "no_aplica", (v1, v2, sd)
+
+    # frontera de datos_medicion: el día de cohort_start entra, el anterior no
+    nuevo("antes", "FronteraAntes", date_submitted="2026-08-31", contacto_empresa_ultimo="2026-10-25", next_date="2026-11-30")
+    nuevo("dia", "FronteraDia", date_submitted="2026-09-01", contacto_empresa_ultimo="2026-10-25", next_date="2026-11-30")
+    sal = seguimiento("2026-10-30")
+    assert lineas(sal, "FronteraDia (Rol) — faltan:") and not lineas(sal, "FronteraAntes (Rol) — faltan:"), sal
+
+    # pausa: con motivo suprime sin_fecha y silencio; sin motivo no; una fecha comprometida sigue en la agenda
+    nuevo("pausa-con", "PausaCon", date_submitted="2026-10-08", pausa_motivo="proceso congelado", pausa_hasta="2026-11-10")
+    nuevo("pausa-sin", "PausaSin", date_submitted="2026-10-08", pausa_hasta="2026-11-10")
+    nuevo("pausa-fecha", "PausaFecha", date_submitted="2026-10-08", pausa_motivo="x", pausa_hasta="2026-11-10",
+          next_date="2026-10-31", next_action="Entrevista")
+    sal = seguimiento("2026-10-30")
+    assert not [l for l in lineas(sal, "PausaCon") if "sin próxima fecha" in l or "sin contacto" in l], sal
+    sin = " ".join(lineas(sal, "PausaSin"))
+    assert "sin próxima fecha" in sin and "sin contacto de la empresa" in sin, sal
+    nuevo("pausa-mala", "PausaMala", date_submitted="2026-10-08", pausa_motivo="x", pausa_hasta="2026-09-30 # nota")
+    mala = " ".join(lineas(seguimiento("2026-10-30"), "PausaMala"))
+    assert "fecha inválida en pausa_hasta" in mala and "sin próxima fecha" in mala and "sin contacto" in mala, \
+        "una pausa_hasta inválida no crea pausa vigente"
+    assert "pausa venció" not in mala, "una fecha inválida solo avisa dato_invalido, no pausa_vencida"
+    assert lineas(sal, "2026-10-31 · PausaFecha"), "la pausa no apaga la fecha comprometida"
+    # screening es un estado activo de la plantilla: su fecha comprometida entra a la agenda
+    nuevo("screen", "ScreenCo", status="screening", date_submitted="2026-08-31", next_date="2026-10-31", next_action="Llamada")
+    assert lineas(seguimiento("2026-10-30"), "2026-10-31 · ScreenCo"), "screening debe contar como activo"
+
+    # respuesta humana documentada: cuenta en la ventana de 14 días; desglose por versión de CV
+    rs.write_fields(apps / "acme-tech-lead-application.md", {
+        "status": "submitted", "follow_up": "waiting", "tier": "plataforma", "advanced": "yes",
+        "respuesta_humana": "si", "respuesta_humana_fecha": (hoy + datetime.timedelta(days=3)).isoformat(),
+        "respuesta_humana_precision": "exacta", "respuesta_humana_evidencia": "correo del reclutador"})
+    r = run(fork, "scripts/conversion_report.py", "--desde", hoy.isoformat(),
+            "--hasta", (hoy + datetime.timedelta(days=1)).isoformat(), "--corte", corte.isoformat())
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "Resultado: 1/3 = 33.3%" in r.stdout, r.stdout
+    assert "Plataforma: 1/" in r.stdout and "avanzaron: Acme" in r.stdout, "las categorías salen de config.yaml"
+    por_version = lineas(r.stdout, "Por cv_version:")[0]
+    assert v1 in por_version and v2 in por_version and "no_aplica" in por_version, por_version
+
+    # tablero: el enlace al PDF lleva el contact.name del config
+    rs.write_fields(apps / "acme-tech-lead-application.md", {"next_date": ""})
+    r = run(fork, "scripts/pipeline_board.py")
+    assert r.returncode == 0, r.stderr
+    tablero = (apps / "pipeline.html").read_text(encoding="utf-8")
+    assert 'href="../cvs-pdf/ada-lovelace-ruiz-acme-tech-lead.pdf"' in tablero, "el enlace al PDF no usa contact.name"
+    (fork / "cvs-pdf/custom.pdf").write_bytes((fork / "cvs-pdf/ada-lovelace-ruiz-acme-tech-lead.pdf").read_bytes())
+    rs.write_fields(otro, {"cv_ruta": "cvs-pdf/custom.pdf"})
+    run(fork, "scripts/pipeline_board.py")
+    assert 'href="../cvs-pdf/custom.pdf"' in (apps / "pipeline.html").read_text(encoding="utf-8"), \
+        "el tablero debe enlazar la ruta registrada en cv_ruta"
+    import re
+    zona = re.search(r'class="zona-cierre" style="width: (-?[\d.]+)%', tablero)
+    assert zona and 0 < float(zona.group(1)) < 58, f"la zona de cierre del radar debe tener ancho positivo: {zona and zona.group(0)}"
+    assert 'data-tier="plataforma"' in tablero and "datos por completar" in tablero
+
+
 def main() -> int:
     files = tracked_files()
     assert "templates/cv-template.md" in files, "el template del CV no llega al fork"
@@ -110,6 +330,9 @@ def main() -> int:
         board = (fork / "applications/pipeline.html").read_text()
         assert "Acme" in board, "el tablero no incluyó la aplicación real"
         assert 'data-col="mia"' in board, "pending_contact sin next_date debería ser jugada propia"
+
+        sello_y_checks(fork)
+        medicion_y_agenda(fork)
 
     print(f"smoke test ok — {len(files)} archivos, flujo completo del README")
     return 0

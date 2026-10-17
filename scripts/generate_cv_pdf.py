@@ -11,13 +11,14 @@ import re
 import sys
 from pathlib import Path
 
-from reportlab.lib.enums import TA_JUSTIFY
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer
+from _config import load_config, require_modules
 
-from _config import load_config
+require_modules("reportlab")
+from reportlab.lib.enums import TA_JUSTIFY  # noqa: E402
+from reportlab.lib.pagesizes import letter  # noqa: E402
+from reportlab.lib.styles import ParagraphStyle  # noqa: E402
+from reportlab.lib.units import inch  # noqa: E402
+from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer  # noqa: E402
 
 # ponytail: Helvetica es built-in (sin fuentes externas) pero solo cubre WinAnsi.
 # Los pocos glifos fuera de ese set se sustituyen en vez de registrar un TTF.

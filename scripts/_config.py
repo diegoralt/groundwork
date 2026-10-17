@@ -2,15 +2,32 @@
 solo para que los scripts no truenen antes de que configures lo tuyo — con el
 placeholder no vas a pasar ningún check real (es la idea: config.yaml sin
 llenar no debe poder aprobar un CV por accidente)."""
-from pathlib import Path
+from __future__ import annotations
 
-import yaml
+import importlib.util
+import sys
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def load_config() -> dict:
-    path = REPO_ROOT / "config.yaml"
+def require_modules(*names: str) -> None:
+    """Sale con 2 (no evaluado) y un diagnóstico si falta una dependencia, sin traceback.
+    Llamar antes de importar los módulos opcionales (pypdf, reportlab)."""
+    missing = [n for n in names if importlib.util.find_spec(n) is None]
+    if missing:
+        print(f"NO EVALUADO: falta {', '.join(missing)} — pip install -r requirements.txt",
+              file=sys.stderr)
+        sys.exit(2)
+
+
+def load_config(root: Path | None = None) -> dict:
+    """`root` solo lo usan las pruebas (un repo temporal); por defecto, este repo."""
+    require_modules("yaml")
+    import yaml
+
+    base = root or REPO_ROOT
+    path = base / "config.yaml"
     if not path.exists():
-        path = REPO_ROOT / "config.example.yaml"
+        path = base / "config.example.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8"))

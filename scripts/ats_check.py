@@ -8,9 +8,10 @@ import re
 import sys
 from pathlib import Path
 
-from pypdf import PdfReader
+from _config import load_config, require_modules
 
-from _config import load_config
+require_modules("pypdf")
+from pypdf import PdfReader  # noqa: E402
 
 MIN_CHARS_OK = 200  # ponytail: bajo esto, el PDF probablemente es ilegible para un ATS
 _contact = load_config()["contact"]
@@ -83,6 +84,8 @@ def report(pdf_path: str, keywords: list[str]) -> int:
 
 
 def _load_keywords(arg: str) -> list[str]:
+    if not arg.strip():  # "" = sin keywords: solo legibilidad y contacto (lo usa review_stamp)
+        return []
     path = Path(arg)
     if path.exists():
         return [line.strip() for line in path.read_text().splitlines() if line.strip()]

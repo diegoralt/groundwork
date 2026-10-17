@@ -21,8 +21,11 @@ Uso:
     python3 scripts/pipeline_board.py --agenda  # solo las fechas, en texto
     python3 scripts/pipeline_board.py --demo    # self-check
 """
+from __future__ import annotations
+
 import html
 import json
+import os
 import re
 import subprocess
 import sys
@@ -33,6 +36,7 @@ LIMIT_COL = 5  # tarjetas visibles antes de "mostrar más" en una columna del ta
 BADGE_CLASS = {
     "rejected": "rechazo",
     "closed_no_feedback": "silencio",
+    "reemplazado": "silencio",
     "withdrawn": "no-enviada",
     "offer": "oferta",
 }
@@ -221,22 +225,33 @@ EXTRA_SCRIPT = """
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import conversion_report  # noqa: E402
+import followup_check  # noqa: E402
 from _config import load_config  # noqa: E402
 from followup_check import (  # noqa: E402
     APPLICATIONS_DIR,
     REPO_ROOT,
+    SUGGEST_CLOSE_DAYS,
+    TITULOS as TITULOS_ALERTA,
     WAITING_WINDOW_DAYS,
+    agenda as fc_agenda,
+    alertas,
     days_since,
     load_applications,
+    parse_date,
+    pausa_vigente,
+    por_tipo as fc_por_tipo,
     resolve_anchor_date,
 )
+from review_stamp import kebab  # noqa: E402
 
 OUTPUT = APPLICATIONS_DIR / "pipeline.html"
 
-CLOSE_THRESHOLD_DAYS = 90  # ventana antes de dar por cerrada una aplicación en silencio; ajusta si tu evidencia real difiere
+# Escala del silencio: el día 45 desde el envío followup_check sugiere cerrar un `no_channel`.
+# Nada se cierra solo; el tablero solo avisa.
+CLOSE_THRESHOLD_DAYS = SUGGEST_CLOSE_DAYS
 AGENDA_WINDOW_DAYS = 7
 
-ACTIVE_STATUS = {"interviewing", "submitted", "in_progress"}
+ACTIVE_STATUS = {"interviewing", "submitted", "screening", "in_progress"}
 
 COLUMNS = [
     ("mia", "Tu jugada", "oklch(0.58 0.14 25)"),
@@ -249,6 +264,7 @@ CLOSED_LABELS = {
     "closed_no_feedback": "Cerrada sin respuesta",
     "withdrawn": "No enviada",
     "offer": "Oferta",
+    "reemplazado": "Reemplazada por otro intento",
 }
 
 def load_tier_labels() -> dict:
@@ -264,32 +280,44 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
          "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 
 
-def parse_date(value):
-    try:
-        return datetime.strptime((value or "").strip(), "%Y-%m-%d").date()
-    except ValueError:
-        return None
+TAREAS = {"revisar_canal", "sugerir_cierre", "pausa_vencida"}
 
 
-def whose_move(app: dict) -> str:
+def whose_move(app: dict, today: date | None = None) -> str:
     """Quién debe mover. Una fecha comprometida es tuya aunque la reunión la
-    corran ellos: está en tu calendario y tienes que llegar preparado."""
-    if app.get("follow_up") == "no_channel":
-        return "nadie"
+    corran ellos: está en tu calendario y tienes que llegar preparado. Una alerta
+    de followup_check que pide acción (buscar canal, sugerir cierre, pausa vencida)
+    también es tuya, aunque el proceso no tenga canal."""
+    today = today or date.today()
     if parse_date(app.get("next_date")):
         return "mia"
+    if TAREAS & {t for t, _ in alertas(app, today)}:
+        return "mia"
+    if pausa_vigente(app, today):
+        return "suya"
+    if app.get("follow_up") == "no_channel":
+        return "nadie"
     if app.get("follow_up") == "pending_contact" or app.get("status") == "in_progress":
         return "mia"
     return "suya"
 
 
-def overdue(app: dict, days) -> bool:
-    """Pasó la ventana normal de espera y sigue sin reclasificarse."""
+def overdue(app: dict, days, today: date) -> bool:
+    """Silencio: pasó la ventana normal desde el último contacto de la empresa (sin pausa)."""
     return (
         app.get("follow_up") in ("waiting", "unconfirmed")
         and days is not None
         and days > WAITING_WINDOW_DAYS
+        and not pausa_vigente(app, today)
     )
+
+
+def vencida(app: dict, today: date) -> bool:
+    """Para el filtro "Solo vencidas": fecha comprometida pasada, silencio o cierre sugerido.
+    El vencimiento por fecha no depende del silencio: una cita de ayer sigue vencida."""
+    when = parse_date(app.get("next_date"))
+    tipos = {t for t, _ in alertas(app, today)}
+    return (when is not None and when < today) or "silencio" in tipos or "sugerir_cierre" in tipos
 
 
 def fecha_corta(d: date) -> str:
@@ -302,15 +330,8 @@ def fecha_larga(d: date) -> str:
 
 
 def agenda(apps: list, today: date) -> list:
-    """Lo comprometido dentro de la ventana, en orden. Lo vencido sigue
-    apareciendo: una fecha que ya pasó sin cerrarse es lo más urgente que hay."""
-    items = []
-    for app in apps:
-        d = parse_date(app.get("next_date"))
-        if d is None or d > today + timedelta(days=AGENDA_WINDOW_DAYS):
-            continue
-        items.append((d, app))
-    return sorted(items, key=lambda pair: pair[0])
+    """La misma agenda que followup_check (vencidas, hoy y ventana), con 7 días."""
+    return fc_agenda(apps, today, AGENDA_WINDOW_DAYS)
 
 
 def primera_frase(texto: str) -> str:
@@ -326,8 +347,8 @@ def card(app: dict, today: date, column: str, oculta: bool = False) -> str:
     days = days_since(resolve_anchor_date(app), today)
     decay = min(100, round(100 * (days or 0) / CLOSE_THRESHOLD_DAYS))
     when = parse_date(app.get("next_date"))
-    late = overdue(app, days)
-    vencida = late or (column == "nadie" and days is not None and decay >= 80)
+    late = overdue(app, days, today)
+    es_vencida = vencida(app, today)
 
     if when == today:
         stamp, stamp_color = "hoy", "oklch(0.5 0.14 25)"
@@ -362,16 +383,16 @@ def card(app: dict, today: date, column: str, oculta: bool = False) -> str:
         f'<p class="accion">{e(action)}</p>' if action
         else '<p class="accion sin">Sin acción definida</p>'
     )
-    aviso = (
-        f'<p class="umbral">se cierra sola en {CLOSE_THRESHOLD_DAYS - days} d</p>'
-        if column == "nadie" and days is not None and decay >= 80 else ""
-    )
+    avisos = [texto for _, texto in alertas(app, today)]
+    if pausa_vigente(app, today):
+        avisos.append(f"pausa: {app.get('pausa_motivo', '')}")
+    aviso = f'<p class="umbral">{e(" · ".join(avisos))}</p>' if avisos else ""
 
     clases = "tarjeta mas-oculta" if oculta else "tarjeta"
     oculto_attr = " hidden" if oculta else ""
     buscar = e((app.get("company", "") + " " + app.get("position", "")).lower())
 
-    return f"""      <article class="{clases}" data-col="{e(column)}" data-tier="{e(app.get('tier', ''))}" data-buscar="{buscar}" data-vencida="{'1' if vencida else '0'}"{oculto_attr} style="background: {surface}; {edge}">
+    return f"""      <article class="{clases}" data-col="{e(column)}" data-tier="{e(app.get('tier', ''))}" data-buscar="{buscar}" data-vencida="{'1' if es_vencida else '0'}"{oculto_attr} style="background: {surface}; {edge}">
         <div class="cab">
           <h3 style="color: {name_color}; font-weight: {name_weight};"><a href="#{e(app['_file'].replace('-application.md', ''))}">{e(app.get('company', '?'))}</a></h3>
           <span class="sello" style="color: {stamp_color};">{e(stamp)}</span>
@@ -446,14 +467,21 @@ def fit_level(texto: str) -> str:
 def material(app: dict) -> list:
     """Enlaces al material real de la aplicación, por existencia de archivo —
     no se listan enlaces rotos. `cvs-pdf/` es hermana de `applications/` (ver
-    .gitignore), no está anidada, así que su href necesita subir un nivel."""
+    .gitignore), no está anidada, así que su href necesita subir un nivel. El PDF es el
+    registrado en el tracking (`cv_ruta` del envío, o `revision_pdf` del sello); sin ninguno, el
+    nombre por defecto del sello (review_stamp.py): `<contact.name en kebab>-<slug>.pdf`."""
     slug = app["_file"].replace("-application.md", "")
+    registrado = (app.get("cv_ruta") or app.get("revision_pdf") or "").strip()
+    pdf_ruta = Path(registrado) if registrado else Path("cvs-pdf") / f"{kebab(load_config()['contact']['name'])}-{slug}.pdf"
+    pdf_ruta = pdf_ruta if pdf_ruta.is_absolute() else REPO_ROOT / pdf_ruta
     piezas = [
         (APPLICATIONS_DIR / f"{slug}-prep.md", f"{slug}-prep.md", "Preparación de la sesión", "MD"),
-        (REPO_ROOT / "cvs-pdf" / f"{slug}.pdf", f"../cvs-pdf/{slug}.pdf", "CV enviado", "PDF"),
+        (pdf_ruta, os.path.relpath(pdf_ruta, APPLICATIONS_DIR), "CV enviado", "PDF"),
         (APPLICATIONS_DIR / app["_file"], app["_file"], "Seguimiento completo", "MD"),
     ]
-    return [(href, nombre, tipo) for ruta, href, nombre, tipo in piezas if ruta.is_file()]
+    sin_cv = app.get("cv_version") == "no_aplica"  # envío sin documento: no hay CV que enlazar
+    return [(href, nombre, tipo) for ruta, href, nombre, tipo in piezas
+            if ruta.is_file() and not (sin_cv and tipo == "PDF")]
 
 
 def cuenta_regresiva(when, today: date) -> str:
@@ -652,7 +680,8 @@ def radar(apps: list, today: date) -> str:
     nada queda a la misma vista que lo que sí vas a hacer."""
     e = html.escape
     hoy_pct, futuro_dias = 58.0, 14
-    izq_por_dia = hoy_pct / CLOSE_THRESHOLD_DAYS
+    horizonte = CLOSE_THRESHOLD_DAYS + 15  # la zona de cierre (lo que pasó el umbral) necesita escala propia
+    izq_por_dia = hoy_pct / horizonte
     der_por_dia = (100 - hoy_pct) / futuro_dias
 
     puntos = []
@@ -664,11 +693,11 @@ def radar(apps: list, today: date) -> str:
             color = "oklch(0.58 0.14 25)" if when == today else "oklch(0.58 0.14 155)"
             sello = "hoy" if when == today else fecha_corta(when)
         else:
-            silencio = min(CLOSE_THRESHOLD_DAYS, days or 0)
+            silencio = min(horizonte, days or 0)
             x = max(0.5, hoy_pct - silencio * izq_por_dia)
             if app.get("follow_up") == "no_channel":
                 color = "#8a857b" if silencio >= 0.8 * CLOSE_THRESHOLD_DAYS else "#b3ada2"
-            elif overdue(app, days):
+            elif overdue(app, days, today):
                 color = "oklch(0.58 0.14 75)"
             else:
                 color = "oklch(0.58 0.14 155)"
@@ -703,7 +732,7 @@ def radar(apps: list, today: date) -> str:
         for i, carril in enumerate(carriles)
     )
     alto = 18 + len(carriles) * 34 + 34
-    cierre = hoy_pct - 60 * izq_por_dia
+    cierre = hoy_pct - CLOSE_THRESHOLD_DAYS * izq_por_dia
 
     return f"""<section class="radar-caja">
   <div class="radar-cab">
@@ -722,9 +751,13 @@ def radar(apps: list, today: date) -> str:
 </section>"""
 
 
-def texto_agenda(apps: list, today: date) -> str:
-    """Línea de texto para el arranque de sesión. Corta a propósito: se inyecta
-    al contexto cada vez que se abre el proyecto."""
+MAX_ALERTAS_ARRANQUE = 8
+
+
+def texto_agenda(apps: list, today: date, maximo: int = MAX_ALERTAS_ARRANQUE) -> str:
+    """Texto para el arranque de sesión: fechas comprometidas (solo procesos activos) y alertas de
+    seguimiento (todos los trackings: un cierre rápido sin datos de medición también avisa).
+    Corto a propósito: se inyecta al contexto cada vez que se abre el proyecto."""
     activas = [a for a in apps if a.get("status") in ACTIVE_STATUS]
     vencidas, hoy, proximas = [], [], []
     for when, app in agenda(activas, today):
@@ -736,9 +769,15 @@ def texto_agenda(apps: list, today: date) -> str:
         else:
             proximas.append(f"  {fecha_corta(when)} · {linea}")
     bloques = vencidas + hoy + proximas
-    if not bloques:
-        return ""
-    return "Fechas comprometidas en los próximos días:\n" + "\n".join(bloques)
+    partes = []
+    if bloques:
+        partes.append("Fechas comprometidas en los próximos días:\n" + "\n".join(bloques))
+    alert = fc_por_tipo(apps, today)
+    filas = [f"  - {a.get('company', '?')} — {texto}" for tipo in TITULOS_ALERTA for a, texto in alert.get(tipo, [])]
+    if filas:
+        resto = f"\n  y {len(filas) - maximo} más: abre el tablero" if len(filas) > maximo else ""
+        partes.append("Alertas de seguimiento:\n" + "\n".join(filas[:maximo]) + resto)
+    return "\n\n".join(partes)
 
 
 def build_html(apps: list, today: date) -> str:
@@ -766,7 +805,7 @@ def build_html(apps: list, today: date) -> str:
             if len(group) > LIMIT_COL else ""
         )
         nota = (
-            '      <p class="nota">Solo portal, sin persona a quien escribirle. No piden acción, solo se apagan.</p>\n'
+            '      <p class="nota">Solo portal, sin persona a quien escribirle. Al día 21 se busca canal; al 45 se sugiere cerrar (nunca se cierran solas).</p>\n'
             if key == "nadie" else ""
         )
         columns.append(
@@ -784,11 +823,7 @@ def build_html(apps: list, today: date) -> str:
         # misma fórmula de "vencida" que card(): si no se computa igual aquí,
         # "Solo vencidas" filtraría las tarjetas pero dejaría su chip de agenda
         # visible sin explicación — el mismo problema que ya se corrigió arriba
-        chip_days = days_since(resolve_anchor_date(app), today)
-        chip_decay = min(100, round(100 * (chip_days or 0) / CLOSE_THRESHOLD_DAYS))
-        chip_vencida = overdue(app, chip_days) or (
-            whose_move(app) == "nadie" and chip_days is not None and chip_decay >= 80
-        )
+        chip_vencida = vencida(app, today)
         chips.append(
             f'    <div class="chip{" hoy" if urgent else ""}" data-tier="{tier_attr}" '
             f'data-buscar="{buscar_attr}" data-vencida="{"1" if chip_vencida else "0"}">'
@@ -824,19 +859,28 @@ def build_html(apps: list, today: date) -> str:
         '</div>'
     )
 
-    cerca_cierre = [
-        a for a in active if whose_move(a) == "nadie"
-        and (days_since(resolve_anchor_date(a), today) or 0) >= 0.8 * CLOSE_THRESHOLD_DAYS
-    ]
+    cerca_cierre = [a for a in active if {t for t, _ in alertas(a, today)} & {"sugerir_cierre", "revisar_canal"}]
     alerta_html = ""
     if cerca_cierre:
         nombres = ", ".join(e(a.get("company", "?")) for a in cerca_cierre[:3])
         extra = f" y {len(cerca_cierre) - 3} más" if len(cerca_cierre) > 3 else ""
-        plural = "aplicaciones" if len(cerca_cierre) != 1 else "aplicación"
-        verbo = "cruzan" if len(cerca_cierre) != 1 else "cruza"
+        plural = "aplicaciones sin canal piden" if len(cerca_cierre) != 1 else "aplicación sin canal pide"
         alerta_html = (
-            f'<div class="alerta"><b>{len(cerca_cierre)} {plural}</b> {verbo} '
-            f'el umbral de cierre (90 días) esta semana — {nombres}{extra}</div>'
+            f'<div class="alerta"><b>{len(cerca_cierre)} {plural}</b> buscar canal (día 21) '
+            f'o decidir el cierre (día 45) — {nombres}{extra}</div>'
+        )
+    alert = fc_por_tipo(apps, today)
+    datos = [(a, texto) for tipo in ("dato_invalido", "sin_auditar", "datos_medicion", "sin_fecha")
+             for a, texto in alert.get(tipo, [])]
+    if datos:
+        def _fila(a, texto):
+            return f"{e(a.get('company', '?'))} ({e(texto)})"
+        nombres = ", ".join(_fila(a, t) for a, t in datos[:3])
+        resto = "".join(f"<li>{_fila(a, t)}</li>" for a, t in datos[3:])
+        extra = f" <details><summary>y {len(datos) - 3} más</summary><ul>{resto}</ul></details>" if resto else ""
+        alerta_html += (
+            f'<div class="alerta"><b>{len(datos)} {"avisos" if len(datos) != 1 else "aviso"}</b> '
+            f'de datos por completar — {nombres}{extra}</div>'
         )
 
     generado_str = datetime.now().strftime("%H:%M")
@@ -867,7 +911,7 @@ def build_html(apps: list, today: date) -> str:
     for a in closed:
         resumen_counts[a.get("status", "")] = resumen_counts.get(a.get("status", ""), 0) + 1
     resumen_partes = []
-    for key in ("rejected", "closed_no_feedback", "withdrawn", "offer"):
+    for key in ("rejected", "closed_no_feedback", "withdrawn", "offer", "reemplazado"):
         if resumen_counts.get(key):
             resumen_partes.append(f'<span><b>{resumen_counts[key]}</b> {e(CLOSED_LABELS[key].lower())}</span>')
     if closed:
@@ -1167,6 +1211,7 @@ def main(argv: list) -> int:
 def demo() -> None:
     """ponytail self-check: valida el reparto por columnas, la agenda y el escapado."""
     today = date(2026, 9, 3)
+    followup_check.COHORTE_DESDE = date(2026, 10, 7)  # el demo no depende del config.yaml de quien lo corra
 
     # una fecha comprometida es jugada tuya, aunque estés "esperando respuesta"
     assert whose_move({"follow_up": "waiting", "next_date": "2026-09-11"}) == "mia"
@@ -1175,14 +1220,23 @@ def demo() -> None:
     # una decisión propia sin enviar también es tuya
     assert whose_move({"follow_up": "n/a", "status": "in_progress"}) == "mia"
     assert whose_move({"follow_up": "pending_contact"}) == "mia"
-    # sin canal gana sobre todo lo demás: no hay a quién escribirle
-    assert whose_move({"follow_up": "no_channel", "next_date": "2026-09-11"}) == "nadie"
+    # una fecha comprometida es tuya aunque el proceso no tenga canal (revisión de canal agendada)
+    assert whose_move({"follow_up": "no_channel", "next_date": "2026-09-11"}) == "mia"
+    # sin fecha y sin alerta, sin canal es "nadie"
+    assert whose_move({"status": "submitted", "follow_up": "no_channel", "date_submitted": "2026-08-30"}, today) == "nadie"
+    # día 21+ sin canal: buscar canal es tarea tuya
+    assert whose_move({"status": "submitted", "follow_up": "no_channel", "date_submitted": "2026-08-01"}, today) == "mia"
+    # pausa vigente: jugada de ellos
+    assert whose_move({"status": "submitted", "follow_up": "waiting", "pausa_motivo": "congelado"}, today) == "suya"
     # una fecha ilegible no puede ascender la tarjeta a jugada tuya
     assert whose_move({"follow_up": "waiting", "next_date": "pronto"}) == "suya"
 
-    assert overdue({"follow_up": "waiting"}, WAITING_WINDOW_DAYS + 1) is True
-    assert overdue({"follow_up": "waiting"}, WAITING_WINDOW_DAYS) is False
-    assert overdue({"follow_up": "no_channel"}, 400) is False
+    assert overdue({"follow_up": "waiting"}, WAITING_WINDOW_DAYS + 1, today) is True
+    assert overdue({"follow_up": "waiting"}, WAITING_WINDOW_DAYS, today) is False
+    assert overdue({"follow_up": "no_channel"}, 400, today) is False
+    # una cita de ayer con contacto reciente sigue vencida (vencimiento por fecha, no por silencio)
+    assert vencida({"status": "interviewing", "follow_up": "waiting", "next_date": "2026-09-02",
+                    "contacto_empresa_ultimo": "2026-09-02"}, today)
 
     apps = [
         {
@@ -1211,8 +1265,44 @@ def demo() -> None:
 
     linea = texto_agenda(apps, today)
     assert "HOY · Activa & Co — Entrevista de fit" in linea
-    assert "Portal SA" not in linea, "sin fecha comprometida no entra a la agenda"
-    assert texto_agenda([], today) == "", "sin fechas no se imprime encabezado suelto"
+    fechas, _, avisos_txt = linea.partition("\n\nAlertas de seguimiento:")
+    assert "Portal SA" not in fechas, "sin fecha comprometida no entra al bloque de fechas"
+    assert "Portal SA" in avisos_txt, "pero su alerta (sugerir cierre) sí entra al bloque de alertas"
+    assert texto_agenda([], today) == "", "sin fechas ni alertas no se imprime encabezado suelto"
+
+    # alertas completas: los ocho tipos llegan a las tarjetas, al banner y al texto de arranque
+    def fx(company, **kw):
+        a = {"_file": f"{company}-application.md", "company": company, "position": "P", "status": "submitted",
+             "tier": "liderazgo", "follow_up": "waiting", "advanced": "no", "next_date": "2026-09-20"}
+        a.update(kw)
+        return a
+
+    dd = lambda n: (today + timedelta(days=n)).isoformat()
+    todas = [
+        fx("A-invalido", next_date="2026-09-09 # nota"),
+        fx("B-sinaudit", follow_up="unconfirmed"),
+        fx("C-sinfecha", advanced="yes", next_date=""),
+        fx("D-silencio", date_submitted=dd(-40)),
+        fx("E-canal", follow_up="no_channel", next_date="", date_submitted=dd(-25)),
+        fx("F-cierre", follow_up="no_channel", next_date="", date_submitted=dd(-50)),
+        fx("G-pausa", pausa_motivo="x", pausa_hasta=dd(-1)),
+        fx("H-medicion", status="rejected", follow_up="n/a", next_date="", date_submitted="2026-10-10"),
+    ]
+    salida = build_html(todas, today)
+    for fragmento in ("fecha inválida en next_date", "follow_up sin auditar", "proceso sin próxima fecha",
+                      "días sin contacto de la empresa", "buscar canal", "sugerir cierre", "la pausa venció"):
+        assert fragmento in salida, f"HTML sin la alerta {fragmento!r}"
+    assert "H-medicion (faltan: canal, fit, cv_version, parseo, minutos_preparacion)" in salida, \
+        "el cierre sin datos de medición aparece en el banner"
+    completo_txt = texto_agenda(todas, today, maximo=99)
+    for nombre in ("A-invalido", "B-sinaudit", "C-sinfecha", "D-silencio", "E-canal", "F-cierre", "G-pausa", "H-medicion"):
+        assert f"- {nombre} —" in completo_txt.partition("Alertas de seguimiento:")[2], f"texto sin {nombre}"
+    sin_tope = texto_agenda(todas, today)
+    assert "y 1 más: abre el tablero" in sin_tope, "9 alertas con tope 8: excedente exacto"
+    solo = texto_agenda([fx("C-sinfecha", advanced="yes", next_date="")], today)
+    assert solo.startswith("Alertas de seguimiento:") and "Fechas comprometidas" not in solo, "solo alertas"
+    assert texto_agenda([fx("ok")], today) == "", "vacío real: nada que fechar ni alertar"
+    assert "y 3 más: abre el tablero" in texto_agenda([fx(f"S{i}", follow_up="unconfirmed") for i in range(11)], today)
 
     # el radar reparte en carriles y nunca deja dos etiquetas encimadas
     marca = radar(apps[:2], today)
@@ -1223,7 +1313,7 @@ def demo() -> None:
 
     # actualizado hoy sin fecha propia se lee "hoy", no "0 d" pegado a la línea de HOY
     app_hoy = {"_file": "hoy-application.md", "company": "Hoy Co", "follow_up": "waiting",
-               "last_updated": today.isoformat()}
+               "contacto_empresa_ultimo": today.isoformat()}
     marca_hoy = radar([app_hoy], today)
     assert ">hoy<" in marca_hoy and "0 d" not in marca_hoy
 
@@ -1233,7 +1323,7 @@ def demo() -> None:
     assert 'data-tier="liderazgo"' in tarjeta and 'data-buscar="x y"' in tarjeta and 'data-col="suya"' in tarjeta
     # mismo fix del radar aplicado a la tarjeta: tocado hoy sin fecha propia dice "hoy", no "0 d"
     tarjeta_hoy = card({"_file": "x-application.md", "company": "X", "position": "Y",
-                        "follow_up": "waiting", "last_updated": today.isoformat()}, today, "suya")
+                        "follow_up": "waiting", "contacto_empresa_ultimo": today.isoformat()}, today, "suya")
     assert ">hoy<" in tarjeta_hoy and "0 d" not in tarjeta_hoy
     tarjeta_oculta = card({"_file": "x-application.md", "company": "X", "position": "Y", "tier": "liderazgo",
                             "follow_up": "waiting"}, today, "suya", oculta=True)
@@ -1244,7 +1334,7 @@ def demo() -> None:
     app_vencida_con_fecha = {
         "_file": "vencida-application.md", "company": "Vencida Co", "position": "Rol",
         "tier": "liderazgo", "status": "interviewing", "follow_up": "waiting",
-        "last_updated": (today - timedelta(days=WAITING_WINDOW_DAYS + 5)).isoformat(),
+        "date_submitted": (today - timedelta(days=WAITING_WINDOW_DAYS + 5)).isoformat(),
         "next_date": today.isoformat(), "next_action": "Acción",
     }
     pagina_vencida = build_html([app_vencida_con_fecha], today)
@@ -1315,7 +1405,7 @@ def demo() -> None:
     assert fit_level("sin dato") == ""
 
     page = build_html(apps, today)
-    assert "Una cosa espera algo de ti" in page, "el titular concuerda en singular"
+    assert "2 cosas esperan algo de ti" in page, "Activa (cita hoy) y Portal SA (sugerir cierre) son jugadas tuyas"
     assert "Activa &amp; Co" in page, "el nombre de la empresa debe ir escapado"
     assert "HOY" in page and "Cerrada SA" in page and "Rechazada" in page
     # "Próximos días" debe responder al mismo filtro de tier/texto que las tarjetas
@@ -1338,8 +1428,8 @@ def demo() -> None:
     )
     assert '"a-application"' not in page and '"a"' in page.split("var FICHAS = ")[1][:60]
     assert 'id="cabecera"' in page
-    # 85 días sin canal ya avisa que se cierra sola
-    assert "se cierra sola en" in page
+    # 85 días sin canal: la tarjeta sugiere el cierre (nada se cierra solo)
+    assert "sugerir cierre" in page
     # la conversión se lee del corpus real de conversion_report, no de estas filas
     assert "Conversión real" in page
     # leyenda, buscador/filtros y foco de teclado visible
@@ -1347,8 +1437,8 @@ def demo() -> None:
     assert "focus-visible" in page
     # el desenlace de una cerrada se pinta como badge de color, no texto plano
     assert 'class="badge rechazo"' in page
-    # Portal SA lleva 85 días sin canal (>=80% de 90) y debe activar la alerta agregada
-    assert "1 aplicación" in page and "cruza el umbral de cierre" in page
+    # Portal SA lleva 85 días sin canal (pasó el día 45) y debe activar la alerta agregada
+    assert "1 aplicación sin canal pide" in page and "decidir el cierre (día 45)" in page
     # el conteo de cada columna necesita id propio para poder recalcularse al filtrar
     assert 'id="cuenta-mia"' in page and 'id="cuenta-suya"' in page and 'id="cuenta-nadie"' in page
     # una activa sin acción tiene que delatarse, no pasar en silencio

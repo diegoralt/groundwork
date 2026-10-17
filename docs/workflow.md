@@ -49,8 +49,10 @@ Corre `/review-application [slug]` (Claude Code) o sigue `prompts/review-applica
 1. Segundo par de ojos (`prompts/cv-reviewer-prompt.md`) — critica el CV contra el posting y contra `profile/`, en una sesión distinta de la que lo escribió.
 2. `ats_check.py` — cobertura de keywords en el PDF final.
 3. `check_em_dash_style.py` — detecta prosa que delata redacción de IA (informativo, no bloquea).
+4. `check_chronological_order.py` y `check_gaps.py` — checks obligatorios sobre el Markdown: cronología inversa estricta y ningún término de la sección "Gaps confirmados" de `profile/skills.md`. Salidas: 0 = OK, 1 = falla, 2 = no evaluado (nunca cuenta como aprobado). `check_star_citation.py` es informativo.
+5. `review_stamp.py [slug] --preparar --keywords "..."` — sello de revisión: repite los checks, regenera el PDF y corre el ATS; si todo sale en 0, guarda en el tracking las huellas SHA-256 del CV, del PDF y de `profile/`. Tras tu aprobación explícita, `--aprobar`; antes de subir el CV, `--check`; al enviar, `--registrar-envio` (guarda `cv_version`, las huellas y `date_submitted`). El sello no usa git: `cvs/`, `cvs-pdf/` y `applications/` nunca se commitean, así que la identidad del documento es su huella. Un formulario sin CV usa `--sin-documento`.
 
-Nunca marques una aplicación como lista sin revisar los tres resultados.
+Nunca marques una aplicación como lista sin revisar todos los resultados, y la aprobación siempre es tuya.
 
 ## Fase 3.5: Práctica antes de una entrevista real
 
@@ -58,9 +60,14 @@ Corre `/mock-interview [slug]` (o sin slug para modo genérico) o pega `prompts/
 
 ## Fase 4: Seguimiento y conversión
 
-- Corre `python3 scripts/followup_check.py` al retomar tu búsqueda — lee el campo `follow_up` de cada tracking file y avisa qué tiene contacto pendiente de seguimiento, qué lleva 15+ días "esperando respuesta" sin reclasificar, y qué quedó sin auditar. Distingue `pending_contact` (vencido, hay a quién escribir) de `no_channel` (vencido, solo portal, espera pasiva) — no genera tarea donde no hay acción real posible.
+- Corre `python3 scripts/followup_check.py` al retomar tu búsqueda. Muestra la agenda (`next_date` vencida, de hoy o de los próximos 3 días) y las alertas de cada proceso activo: sin fecha, silencio de la empresa (más de 15 días desde `contacto_empresa_ultimo`, `date_resubmitted` o `date_submitted`), sin canal (día 21: buscar canal; día 45: sugerir cerrar, nunca cierra solo), pausa vencida, sin auditar (`follow_up` ausente o `unconfirmed`), fecha inválida y datos de medición por completar. `pipeline_board.py --agenda` imprime lo mismo para pegarlo al arrancar una sesión.
+- Qué llenar y cuándo (campos de `templates/application-tracking-template.md`; vacío hasta que apliquen):
+  - **Al enviar:** `review_stamp.py <slug> --registrar-envio` escribe `date_submitted` y `cv_version` (`no_aplica` si no hubo documento); tú llenas `canal`, `fit`, `parseo` y `minutos_preparacion`.
+  - **La primera vez que una persona responde:** `respuesta_humana`, `respuesta_humana_fecha`, `respuesta_humana_precision` y `respuesta_humana_evidencia`. No se sobrescriben: la métrica mide la primera respuesta. Un correo automático va en `respuesta_auto_fecha` y no cuenta.
+  - **Cuando la empresa te escribe:** `contacto_empresa_ultimo` (reinicia el reloj del silencio). Si congelan el proceso: `pausa_motivo` y, si saben hasta cuándo, `pausa_hasta`; sin motivo la pausa no se reconoce.
+  - `cohort_start` en `config.yaml` (opcional) marca desde qué día se exigen los campos de medición; sin él, `datos_medicion` nunca avisa.
 - Un rechazo o cierre no borra el CV/tracking: quedan como material reutilizable para procesos similares.
-- Corre `python3 scripts/conversion_report.py` para tu tasa de conversión real por categoría — se calcula sola desde el frontmatter (`tier`/`advanced`), no hace falta recontar a mano. Si tu percepción de qué tipo de rol te funciona no coincide con este número, confía en el número.
+- Corre `python3 scripts/conversion_report.py` para tu tasa de conversión real por categoría — se calcula sola desde el frontmatter (`tier`/`advanced`), no hace falta recontar a mano. Si tu percepción de qué tipo de rol te funciona no coincide con este número, confía en el número. Debajo reporta la respuesta humana en 14 días (`--corte`, `--desde`, `--hasta` fijan el universo para releerlo igual más tarde), desglosada por canal, categoría, fit, versión de CV y parseo; un campo con un valor fuera de la lista de la plantilla se muestra como dato inválido, no se descarta.
 - Corre `python3 scripts/pipeline_board.py --open` para el tablero visual: columnas por de quién es el siguiente movimiento (no por estado administrativo), agenda de fechas comprometidas, radar de silencio acumulado, una ficha por aplicación activa e histórico de cerradas. Lee `next_action`/`next_date`/`interviewer`/`open_questions` del tracking si están (ver `templates/application-tracking-template.md`) — sin ellos genera igual, solo con menos detalle por tarjeta.
 
 ## Tips
