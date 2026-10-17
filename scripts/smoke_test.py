@@ -89,8 +89,11 @@ def sello_y_checks(fork: Path) -> None:
     assert run(fork, *stamp, "--check").returncode == 1, "editar el CV invalida el sello"
     cv.write_text(rs.DEMO_CV, encoding="utf-8")
     assert run(fork, *stamp, "--check").returncode == 0
-    (fork / "profile/experience.md").write_text("otro perfil\n", encoding="utf-8")
+    experiencia = fork / "profile/experience.md"
+    original_exp = experiencia.read_text(encoding="utf-8")
+    experiencia.write_text("otro perfil\n", encoding="utf-8")
     assert run(fork, *stamp, "--check").returncode == 1, "editar el perfil invalida el sello"
+    experiencia.write_text(original_exp, encoding="utf-8")
     # envío sin documento
     (fork / "applications/formulario-application.md").write_text(tracking, encoding="utf-8")
     sd = ["scripts/review_stamp.py", "formulario"]
@@ -102,6 +105,88 @@ def sello_y_checks(fork: Path) -> None:
     for rel in ("cvs/cv_for_x.md", "cvs-pdf/x.pdf", "applications/x-application.md", "config.yaml"):
         r = subprocess.run(["git", "-C", str(REPO_ROOT), "check-ignore", "-q", rel])
         assert r.returncode == 0, f"{rel} no está ignorado: el sello podría publicar datos"
+
+
+def medicion_y_agenda(fork: Path) -> None:
+    """Esquema único de tracking de punta a punta: la plantilla pública y el sello producen lo que
+    leen followup_check, conversion_report y pipeline_board, con la config de OTRO usuario
+    (tier propio, nombre con acentos, cohort_start que YAML lee como fecha)."""
+    import datetime
+    import review_stamp as rs
+
+    hoy = datetime.date.today()
+    corte = hoy + datetime.timedelta(days=20)
+    (fork / "config.yaml").write_text(rs.DEMO_CONFIG + "cohort_start: 2026-09-01\n", encoding="utf-8")
+    apps = fork / "applications"
+    plantilla = (fork / "templates/application-tracking-template.md").read_text(encoding="utf-8")
+
+    def nuevo(slug: str, empresa: str, **campos) -> Path:
+        path = apps / f"{slug}-application.md"
+        path.write_text(plantilla.replace("[Empresa]", empresa).replace("[Título del Rol]", "Rol"), encoding="utf-8")
+        rs.write_fields(path, {"status": "submitted", "follow_up": "waiting", "tier": "plataforma",
+                               "advanced": "no", **campos})
+        return path
+
+    def lineas(salida: str, nombre: str) -> list[str]:
+        return [l for l in salida.splitlines() if nombre in l]
+
+    seguimiento = lambda dia: run(fork, "scripts/followup_check.py", "--hoy", dia).stdout
+
+    # identidad: el sello llena cv_version y date_submitted; solo faltan los campos que llena el usuario
+    sal = seguimiento(corte.isoformat())
+    assert "faltan: canal, fit, parseo, minutos_preparacion" in sal and "cv_version" not in sal, sal
+    assert "dato_invalido" not in sal and "fecha inválida" not in sal, "la plantilla no deja fechas inválidas"
+
+    # dos versiones de CV distinguibles, a partir de la misma plantilla y el mismo sello
+    otro = nuevo("acme-otro", "Acme")
+    cv2 = fork / "cvs/cv_for_acme-otro.md"
+    cv2.write_text(rs.DEMO_CV + "\n- Bullet distinto.\n", encoding="utf-8")
+    stamp2 = ["scripts/review_stamp.py", "acme-otro"]
+    assert run(fork, *stamp2, "--preparar", "--validacion", "smoke: segunda versión").returncode == 0
+    assert run(fork, *stamp2, "--aprobar").returncode == 0
+    assert run(fork, *stamp2, "--registrar-envio").returncode == 0
+    v1 = rs.read_frontmatter(apps / "acme-tech-lead-application.md")[2]["cv_version"]
+    v2 = rs.read_frontmatter(otro)[2]["cv_version"]
+    sd = rs.read_frontmatter(apps / "formulario-application.md")[2]["cv_version"]
+    assert len({v1, v2}) == 2 and sd == "no_aplica", (v1, v2, sd)
+
+    # frontera de datos_medicion: el día de cohort_start entra, el anterior no
+    nuevo("antes", "FronteraAntes", date_submitted="2026-08-31", contacto_empresa_ultimo="2026-10-25", next_date="2026-11-30")
+    nuevo("dia", "FronteraDia", date_submitted="2026-09-01", contacto_empresa_ultimo="2026-10-25", next_date="2026-11-30")
+    sal = seguimiento("2026-10-30")
+    assert lineas(sal, "FronteraDia (Rol) — faltan:") and not lineas(sal, "FronteraAntes (Rol) — faltan:"), sal
+
+    # pausa: con motivo suprime sin_fecha y silencio; sin motivo no; una fecha comprometida sigue en la agenda
+    nuevo("pausa-con", "PausaCon", date_submitted="2026-10-08", pausa_motivo="proceso congelado", pausa_hasta="2026-11-10")
+    nuevo("pausa-sin", "PausaSin", date_submitted="2026-10-08", pausa_hasta="2026-11-10")
+    nuevo("pausa-fecha", "PausaFecha", date_submitted="2026-10-08", pausa_motivo="x", pausa_hasta="2026-11-10",
+          next_date="2026-10-31", next_action="Entrevista")
+    sal = seguimiento("2026-10-30")
+    assert not [l for l in lineas(sal, "PausaCon") if "sin próxima fecha" in l or "sin contacto" in l], sal
+    sin = " ".join(lineas(sal, "PausaSin"))
+    assert "sin próxima fecha" in sin and "sin contacto de la empresa" in sin, sal
+    assert lineas(sal, "2026-10-31 · PausaFecha"), "la pausa no apaga la fecha comprometida"
+
+    # respuesta humana documentada: cuenta en la ventana de 14 días; desglose por versión de CV
+    rs.write_fields(apps / "acme-tech-lead-application.md", {
+        "status": "submitted", "follow_up": "waiting", "tier": "plataforma", "advanced": "yes",
+        "respuesta_humana": "si", "respuesta_humana_fecha": (hoy + datetime.timedelta(days=3)).isoformat(),
+        "respuesta_humana_precision": "exacta", "respuesta_humana_evidencia": "correo del reclutador"})
+    r = run(fork, "scripts/conversion_report.py", "--desde", hoy.isoformat(),
+            "--hasta", (hoy + datetime.timedelta(days=1)).isoformat(), "--corte", corte.isoformat())
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "Resultado: 1/3 = 33.3%" in r.stdout, r.stdout
+    assert "Plataforma: 1/" in r.stdout and "avanzaron: Acme" in r.stdout, "las categorías salen de config.yaml"
+    por_version = lineas(r.stdout, "Por cv_version:")[0]
+    assert v1 in por_version and v2 in por_version and "no_aplica" in por_version, por_version
+
+    # tablero: el enlace al PDF lleva el contact.name del config
+    rs.write_fields(apps / "acme-tech-lead-application.md", {"next_date": ""})
+    r = run(fork, "scripts/pipeline_board.py")
+    assert r.returncode == 0, r.stderr
+    tablero = (apps / "pipeline.html").read_text(encoding="utf-8")
+    assert 'href="../cvs-pdf/ada-lovelace-ruiz-acme-tech-lead.pdf"' in tablero, "el enlace al PDF no usa contact.name"
+    assert 'data-tier="plataforma"' in tablero and "datos por completar" in tablero
 
 
 def main() -> int:
@@ -180,6 +265,7 @@ def main() -> int:
         assert 'data-col="mia"' in board, "pending_contact sin next_date debería ser jugada propia"
 
         sello_y_checks(fork)
+        medicion_y_agenda(fork)
 
     print(f"smoke test ok — {len(files)} archivos, flujo completo del README")
     return 0

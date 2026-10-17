@@ -55,8 +55,8 @@ Flujo completo por aplicación en `docs/workflow.md`.
 - Detector de prosa que delata redacción de IA (`scripts/check_em_dash_style.py`)
 - Checks obligatorios con salida 0 / 1 / 2 (el 2, "no evaluado", nunca cuenta como aprobado): cronología inversa (`scripts/check_chronological_order.py`) y gaps que nunca deben aparecer en un CV (`scripts/check_gaps.py`, desde la sección "Gaps confirmados" de `profile/skills.md`); más un aviso informativo de historias STAR sin citar (`scripts/check_star_citation.py`)
 - Sello de revisión (`scripts/review_stamp.py`): liga lo que revisaste y aprobaste al CV exacto que envías, por huella SHA-256 del CV, del PDF y de tu perfil — sin git, porque tus CVs nunca se commitean
-- Tracking de seguimiento con distinción entre "tienes a quién escribirle" y "solo puedes esperar" (`scripts/followup_check.py`)
-- Cálculo de conversión real por categoría de rol, no por percepción (`scripts/conversion_report.py`)
+- Agenda y alertas de seguimiento — fechas comprometidas, silencio, canal por buscar, pausas y datos de medición por completar (`scripts/followup_check.py`)
+- Cálculo de conversión real por categoría de rol y métrica de respuesta humana en 14 días, con cohorte opcional (`scripts/conversion_report.py`, `cohort_start` en `config.yaml`)
 - Tablero visual del pipeline (ver sección propia abajo)
 - Cuestionario de bootstrap para construir tu perfil desde cero (`prompts/bootstrap-questionnaire.md`)
 - Práctica de entrevista en vivo, turno por turno (`prompts/mock-interview-prompt.md`)

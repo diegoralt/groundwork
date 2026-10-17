@@ -9,6 +9,12 @@ contact:
   linkedin: "https://www.linkedin.com/in/tu-usuario/"
   github: "https://github.com/tu-usuario"
 
+# Opcional: fecha (AAAA-MM-DD) desde la que quieres medir tu búsqueda. followup_check.py
+# avisa de los campos de medición que falten (canal, fit, cv_version, parseo,
+# minutos_preparacion) en toda aplicación enviada desde ese día. Vacío o sin la clave:
+# no hay cohorte y no avisa de nada. Cámbiala al abrir la siguiente tanda de envíos.
+cohort_start: ""
+
 # Categorías de rol para conversion_report.py y pipeline_board.py (los chips
 # de filtro del tablero salen de esta misma lista). Defínelas según tu propio
 # mercado objetivo — no copies las de otra persona, las suyas reflejan su

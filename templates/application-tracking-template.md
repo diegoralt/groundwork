@@ -8,7 +8,8 @@ advanced: [yes | no — ¿llegó a entrevista o prueba técnica? déjalo vacío 
 follow_up: [waiting | pending_contact | no_channel | unconfirmed]
 follow_up_contact: [email o nombre del contacto, solo si follow_up es pending_contact]
 date_started: YYYY-MM-DD
-date_submitted: YYYY-MM-DD
+# date_submitted queda vacío hasta enviar: `review_stamp.py <slug> --registrar-envio` lo llena (o escríbelo AAAA-MM-DD)
+date_submitted:
 last_updated: YYYY-MM-DD
 tags: [empresa, vacante, área, tipo-rol]
 # Los siguientes campos son opcionales — no rompen nada si faltan, pero
@@ -16,9 +17,49 @@ tags: [empresa, vacante, área, tipo-rol]
 # los necesita para saber de quién es el siguiente movimiento. Sin `next_action`
 # la tarjeta se genera igual, pero avisa "Sin acción definida".
 next_action: [una línea, verbo primero — ej. "Escribir seguimiento si no hay respuesta para el 12-09"]
-next_date: [YYYY-MM-DD — solo si hay una fecha comprometida (entrevista agendada, plazo de decisión propio). Omitir si no la hay]
 interviewer: [nombre; puesto de quien entrevista; qué esperar de la sesión — hasta tres partes separadas por ";". Omitir si aún no lo sabes]
 open_questions: [preguntas sin resolver de esta aplicación, separadas por ";" — ej. "modalidad y ubicación; a quién reporta el rol"]
+# Los campos de abajo los leen followup_check.py, conversion_report.py y pipeline_board.py.
+# Déjalos vacíos hasta que apliquen: un valor entre comillas o con un comentario al lado
+# (`canal: portal # nota`) no es válido y se reporta como dato inválido. Las fechas son AAAA-MM-DD.
+#
+# Agenda y seguimiento
+# next_date: fecha comprometida (entrevista agendada, plazo de decisión propio); vacía si no hay
+next_date:
+# contacto_empresa_ultimo: última vez que la empresa te escribió; reinicia el reloj del silencio
+contacto_empresa_ultimo:
+# pausa_motivo + pausa_hasta: la empresa congeló el proceso; sin motivo la pausa no se reconoce
+pausa_motivo:
+pausa_hasta:
+# revision_canal_fecha: cuándo buscaste canal en un proceso follow_up: no_channel (apaga el aviso del día 21)
+revision_canal_fecha:
+# actividad_propia_ultima: tu último paso (seguimiento enviado, tarea de prueba entregada)
+actividad_propia_ultima:
+#
+# Medición: se llena al enviar
+# canal: calido | directo_frio | portal
+canal:
+# fit: compatible | excepcion | desconocido
+fit:
+# cv_version: lo escribe `review_stamp.py --registrar-envio`; no_aplica si el envío no llevó documento
+cv_version:
+# parseo: ok | corregido | fallo | no_evaluado | no_aplica (cómo quedó tu CV al subirlo a un portal)
+parseo:
+# minutos_preparacion: minutos que te llevó preparar esta aplicación, solo el número
+minutos_preparacion:
+#
+# Respuesta humana: se llena la primera vez que una persona (no un correo automático) responde.
+# No se sobrescribe después: la métrica de 14 días mide la primera respuesta.
+# respuesta_humana: si | no | ambigua
+respuesta_humana:
+respuesta_humana_fecha:
+# respuesta_humana_precision: exacta | a_mas_tardar (si solo sabes que llegó antes de cierta fecha)
+respuesta_humana_precision:
+# respuesta_humana_evidencia: dónde queda la prueba (asunto del correo, captura, mensaje)
+respuesta_humana_evidencia:
+respuesta_auto_fecha:
+# cierre_causa_origen: declarada | inferida | desconocida (al cerrar el proceso)
+cierre_causa_origen:
 ---
 
 # [Empresa] - [Título del Rol] Application [[STATUS]]
