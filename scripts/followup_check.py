@@ -296,5 +296,11 @@ if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "--demo":
         demo()
         sys.exit(0)
-    hoy_arg = sys.argv[sys.argv.index("--hoy") + 1] if "--hoy" in sys.argv else None
-    sys.exit(report(parse_date(hoy_arg) if hoy_arg else None))
+    hoy = None
+    if "--hoy" in sys.argv:
+        i = sys.argv.index("--hoy") + 1
+        hoy = parse_date(sys.argv[i]) if i < len(sys.argv) else None
+        if hoy is None:  # un typo no puede degradar en silencio a la fecha real
+            print(f"Fecha inválida para --hoy: {sys.argv[i] if i < len(sys.argv) else '(falta el valor)'}")
+            sys.exit(2)
+    sys.exit(report(hoy))

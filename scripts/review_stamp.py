@@ -261,7 +261,12 @@ def registrar_envio(root: Path, tracking: Path) -> int:
     parsed = read_frontmatter(tracking)
     fm = parsed[2]
     hoy = datetime.date.today().isoformat()
-    fecha = {} if fm.get("date_submitted", "").strip() else {"date_submitted": hoy}
+    # se conserva solo una fecha válida: vacía, "YYYY-MM-DD" de la plantilla o texto suelto se reemplazan
+    try:
+        datetime.date.fromisoformat(fm.get("date_submitted", "").strip())
+        fecha = {}
+    except ValueError:
+        fecha = {"date_submitted": hoy}
     if fm.get("revision_documento") == "no aplica":
         # sin documento: la identidad de un CV anterior (ruta, huellas, familia, idioma) ya no aplica
         write_fields(tracking, {"cv_version": "no_aplica", "cv_ruta": "", "cv_sha256": "", "pdf_sha256": "",

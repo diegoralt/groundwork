@@ -93,7 +93,7 @@ def sello_y_checks(fork: Path) -> None:
     assert r.returncode == 0, f"--registrar-envio falló:\n{r.stdout}"
     fm = rs.read_frontmatter(fork / f"applications/{slug}-application.md")[2]
     assert fm["cv_version"] == fm["revision_pdf_sha256"][:12] and fm["cv_base"] == "plataforma", fm
-    assert fm["date_submitted"], "el registro del envío fija date_submitted si estaba vacía"
+    assert fm["date_submitted"] and fm["date_submitted"][0].isdigit(), "el registro fija date_submitted si estaba vacía o era el placeholder"
     # invalidación: editar el CV, el PDF o el perfil después de aprobar
     cv.write_text(rs.DEMO_CV + "\n- Bullet agregado después de aprobar.\n", encoding="utf-8")
     assert run(fork, *stamp, "--check").returncode == 1, "editar el CV invalida el sello"
@@ -139,6 +139,17 @@ def sello_y_checks(fork: Path) -> None:
         "un envío sin documento no debe enlazar «CV enviado» (el PDF viejo sigue en disco)"
     (fork / "applications/trans-application.md").unlink()  # no entra a la cohorte de medicion_y_agenda
 
+    # date_submitted con el placeholder de la plantilla anterior se reemplaza; una fecha válida se conserva
+    for previo, esperado in (("YYYY-MM-DD", None), ("2026-09-15", "2026-09-15")):
+        (fork / "applications/fecha-application.md").write_text(tracking, encoding="utf-8")
+        rs.write_fields(fork / "applications/fecha-application.md", {"date_submitted": previo})
+        f = ["scripts/review_stamp.py", "fecha"]
+        assert run(fork, *f, "--sin-documento", "--validacion", "x").returncode == 0
+        assert run(fork, *f, "--registrar-envio").returncode == 0
+        valor = rs.read_frontmatter(fork / "applications/fecha-application.md")[2]["date_submitted"]
+        assert valor == (esperado or __import__("datetime").date.today().isoformat()), (previo, valor)
+    (fork / "applications/fecha-application.md").unlink()
+
     # lo sellado nunca se commitea: git debe ignorar todo lo que el sello escribe o lee
     for rel in ("cvs/cv_for_x.md", "cvs-pdf/x.pdf", "applications/x-application.md", "config.yaml"):
         r = subprocess.run(["git", "-C", str(REPO_ROOT), "check-ignore", "-q", rel])
@@ -169,6 +180,8 @@ def medicion_y_agenda(fork: Path) -> None:
         return [l for l in salida.splitlines() if nombre in l]
 
     seguimiento = lambda dia: run(fork, "scripts/followup_check.py", "--hoy", dia).stdout
+    assert run(fork, "scripts/followup_check.py", "--hoy", "2026-13-01").returncode == 2, "--hoy inválido no usa la fecha real"
+    assert run(fork, "scripts/followup_check.py", "--hoy").returncode == 2, "--hoy sin valor"
 
     # identidad: el sello llena cv_version y date_submitted; solo faltan los campos que llena el usuario
     sal = seguimiento(corte.isoformat())
